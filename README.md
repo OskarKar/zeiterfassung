@@ -5,7 +5,7 @@ Lokale Zeiterfassungs-App für Synology NAS. Läuft vollständig im lokalen Netz
 ## Tech Stack
 
 - **Backend:** Node.js + Express
-- **Datenbank:** SQLite (`better-sqlite3`) mit WAL-Modus
+- **Datenbank:** SQLite (Node.js built-in) mit WAL-Modus
 - **Frontend:** Vanilla JS + Tailwind CSS (statisch, kein Build-Schritt)
 - **Echtzeit:** Socket.io
 - **Deployment:** Docker / docker-compose
@@ -19,13 +19,21 @@ zeiterfassung-docker/
 ├── server/
 │   ├── index.js          # Express + Socket.io Server
 │   ├── db.js             # SQLite Schema & Queries
+│   ├── routes/
+│   │   ├── employees.js  # Mitarbeiterverwaltung API
+│   │   ├── import.js     # Excel-Import API
+│   │   ├── export.js     # PDF-Export API
+│   │   └── stats.js      # Statistik API
 │   └── package.json
 ├── client/
 │   ├── index.html        # HTML-Shell
 │   └── app.js            # Frontend-Logik
-├── data/                 # SQLite-Datei (persistentes Volume)
+├── data/                 # SQLite-Datei (persistentes Volume – nie in Git!)
 ├── Dockerfile
 ├── docker-compose.yml
+├── nas-init.sh           # Einmaliges NAS-Setup (Git-Init + erster Build)
+├── update.sh             # Update-Skript für NAS (git pull + rebuild)
+├── update.bat            # Update-Skript für Windows lokal
 └── README.md
 ```
 
@@ -33,34 +41,60 @@ zeiterfassung-docker/
 
 ## Schnellstart (Synology NAS)
 
-### 1. Dateien auf die NAS kopieren
+### 1. Einmaliges Setup via Task Scheduler
 
-Kopiere den gesamten Ordner `zeiterfassung-docker/` auf deine Synology NAS, z. B. nach:
-```
-/volume1/docker/zeiterfassung/
-```
+Im DSM: **Systemsteuerung → Aufgabenplaner → Erstellen → Benutzerdefiniertes Skript**
 
-### 2. Per SSH oder Container Manager starten
-
-**Per SSH:**
+- Name: `Zeiterfassung Init`
+- Benutzer: `root`
+- Zeitplan: Manuell
+- Skript:
 ```bash
-cd /volume1/docker/zeiterfassung
-docker-compose up -d
+cd /volume1/docker/zeiterfassung-docker
+git init
+git remote remove origin 2>/dev/null || true
+git remote add origin https://github.com/OskarKar/zeiterfassung.git
+git fetch origin
+git reset --hard origin/main
+docker compose up -d --build
 ```
 
-**Per Synology Container Manager:**
-1. Öffne Container Manager → Projekt → Erstellen
-2. Wähle den Ordner mit der `docker-compose.yml`
-3. Starte das Projekt
+Task einmalig **Ausführen** → App läuft auf Port 3000.
 
-### 3. App aufrufen
+### 2. App aufrufen
 
-Im Browser im lokalen Netzwerk:
 ```
 http://<NAS-IP>:3000
 ```
 
-z. B. `http://192.168.1.100:3000`
+---
+
+## Updates einspielen
+
+### Schritt 1 — Auf Windows (nach Änderungen)
+```bash
+git add .
+git commit -m "v1.x.x: Beschreibung"
+git push
+```
+
+### Schritt 2 — Auf dem NAS (Task Scheduler)
+
+Im DSM: **Aufgabenplaner → Task "Zeiterfassung Update" → Ausführen**
+
+Task einmalig anlegen (dann immer wiederverwendbar):
+- Name: `Zeiterfassung Update`
+- Benutzer: `root`
+- Zeitplan: Manuell
+- Skript:
+```bash
+cd /volume1/docker/zeiterfassung-docker
+git pull
+docker compose build --no-cache
+docker compose up -d
+```
+
+> Die Datenbank in `./data` bleibt bei jedem Update **vollständig erhalten**.
 
 ---
 
