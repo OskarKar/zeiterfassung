@@ -7,7 +7,7 @@
 
 REPO="https://github.com/OskarKar/zeiterfassung.git"
 DIR="/volume1/docker/zeiterfassung-docker"
-LOG="$DIR/init.log"
+LOG="$DIR/data/init.log"
 
 mkdir -p "$DIR"
 mkdir -p "$DIR/data"

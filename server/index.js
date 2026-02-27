@@ -182,7 +182,7 @@ app.get('/api/version', (req, res) => {
 app.get('/api/update-log', (req, res) => {
   const fs = require('fs');
   const updateLog = path.join(__dirname, '..', 'data', 'update.log');
-  const initLog   = path.join(__dirname, '..', '..', 'init.log');
+  const initLog   = path.join(__dirname, '..', 'data', 'init.log');
   let parts = [];
   if (fs.existsSync(initLog))   parts.push('=== init.log ===\n' + fs.readFileSync(initLog, 'utf8'));
   if (fs.existsSync(updateLog)) parts.push('=== update.log ===\n' + fs.readFileSync(updateLog, 'utf8'));
