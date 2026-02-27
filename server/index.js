@@ -178,6 +178,19 @@ app.get('/api/version', (req, res) => {
   res.json({ version: pkg.version, nodeEnv: process.env.NODE_ENV || 'development' });
 });
 
+// ==================== UPDATE LOG ROUTE ====================
+app.get('/api/update-log', (req, res) => {
+  const fs = require('fs');
+  const logPath = path.join(__dirname, '..', 'data', 'update.log');
+  if (!fs.existsSync(logPath)) {
+    return res.json({ log: 'Noch kein Update-Log vorhanden.\nFühre das Update-Skript aus, um ein Log zu erstellen.' });
+  }
+  const content = fs.readFileSync(logPath, 'utf8');
+  // Return last 8 KB to avoid sending huge files
+  const trimmed = content.length > 8192 ? '...(gekürzt)\n' + content.slice(-8192) : content;
+  res.json({ log: trimmed });
+});
+
 // ==================== SETTINGS ROUTES ====================
 app.get('/api/settings', (req, res) => {
   const settings = getSettings();

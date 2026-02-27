@@ -151,7 +151,12 @@ function renderMain() {
           <span class="bg-white/20 px-3 py-1 rounded-full text-sm font-medium">
             ${state.isBoss ? '🔐 Admin' : `👤 ${state.currentUser.name}`}
           </span>
-          ${state.isBoss ? `<span class="bg-white/10 px-2 py-1 rounded-full text-xs text-white/70 font-mono">v${state.appVersion}</span>` : ''}
+          ${state.isBoss ? `
+            <span class="bg-white/10 px-2 py-1 rounded-full text-xs text-white/70 font-mono">v${state.appVersion}</span>
+            <button data-action="show-update-log"
+              class="bg-white/20 hover:bg-white/30 px-3 py-1 rounded-full text-xs transition font-medium">
+              📋 Update-Log
+            </button>` : ''}
           <button data-action="logout" class="bg-white/20 hover:bg-white/30 px-3 py-1 rounded-full text-sm transition">
             Abmelden
           </button>
@@ -190,6 +195,19 @@ function renderMain() {
         ${state.activeTab === 'statistik' && state.isBoss ? renderStatistik() : ''}
         ${state.activeTab === 'auditlog'  && state.isBoss ? renderAuditLog() : ''}
         ${state.activeTab === 'einstellungen' && state.isBoss ? renderEinstellungen() : ''}
+      </div>
+    </div>
+
+    <!-- Update-Log Modal -->
+    <div id="update-log-modal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+      <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col">
+        <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+          <h2 class="text-lg font-bold text-gray-800">📋 Update-Log</h2>
+          <button id="update-log-close" class="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
+        </div>
+        <div class="overflow-y-auto flex-1 p-4">
+          <pre id="update-log-content" class="text-xs font-mono text-gray-700 whitespace-pre-wrap">Lade…</pre>
+        </div>
       </div>
     </div>
   </div>`;
@@ -852,6 +870,14 @@ function attachListeners() {
     editEntryForm.addEventListener('submit', handleUpdateEntry);
   }
 
+  // Update-log modal close
+  const logClose = document.getElementById('update-log-close');
+  if (logClose) {
+    logClose.addEventListener('click', () => {
+      document.getElementById('update-log-modal')?.classList.add('hidden');
+    });
+  }
+
   // Excel import file picker (multi-file)
   const importFileInput = document.getElementById('import-excel-file');
   if (importFileInput) {
@@ -949,6 +975,9 @@ async function handleAction(e) {
     case 'load-all-entries':
       state.editingEntryId = null;
       loadAndRenderEntries();
+      break;
+    case 'show-update-log':
+      handleShowUpdateLog();
       break;
     case 'export-pdf':
       handleExportPDF();
@@ -1160,6 +1189,24 @@ async function handleSaveSettings(e) {
     showToast('✅ Einstellungen gespeichert!');
   } catch (err) {
     alert('Fehler: ' + err.message);
+  }
+}
+
+async function handleShowUpdateLog() {
+  const modal = document.getElementById('update-log-modal');
+  const content = document.getElementById('update-log-content');
+  if (!modal || !content) return;
+  modal.classList.remove('hidden');
+  content.textContent = 'Lade…';
+  try {
+    const data = await api('GET', '/update-log');
+    // Colorize SUCCESS lines green
+    content.innerHTML = data.log
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/(SUCCESS[^\n]*)/g, '<span class="text-green-600 font-semibold">$1</span>')
+      .replace(/(=====+[^\n]*)/g, '<span class="text-blue-600 font-semibold">$1</span>');
+  } catch (err) {
+    content.textContent = 'Fehler: ' + err.message;
   }
 }
 
