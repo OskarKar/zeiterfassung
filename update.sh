@@ -1,15 +1,24 @@
 #!/bin/sh
 # ============================================================
 # Zeiterfassung – Update-Skript (NAS / Linux)
-# Zieht den neuesten Code und baut den Docker-Container neu.
+# Lädt den neuesten Code von GitHub und baut den Container neu.
 # Die Datenbank in ./data bleibt UNBERÜHRT.
 # ============================================================
 
-REPO="https://github.com/OskarKar/zeiterfassung.git"
 DIR="/volume1/docker/zeiterfassung-docker"
+TOKEN_FILE="$DIR/data/.github_token"
 
-mkdir -p "$DIR/data"
+if [ ! -f "$TOKEN_FILE" ]; then
+  echo "FEHLER: Token-Datei nicht gefunden: $TOKEN_FILE"
+  echo "Bitte Token speichern: echo 'github_pat_...' > $TOKEN_FILE"
+  exit 1
+fi
+
+TOKEN=$(cat "$TOKEN_FILE")
+BASE="https://$TOKEN@raw.githubusercontent.com/OskarKar/zeiterfassung/main"
 LOG_FILE="$DIR/data/update.log"
+
+mkdir -p "$DIR/data" "$DIR/client" "$DIR/server" "$DIR/server/routes"
 
 log() {
   echo "$1"
@@ -21,29 +30,26 @@ log "========================================="
 log "Update gestartet: $(date '+%Y-%m-%d %H:%M:%S')"
 log "========================================="
 
-cd "$DIR" || { log "FEHLER: Verzeichnis $DIR nicht gefunden"; exit 1; }
+log "[1/3] Dateien von GitHub herunterladen..."
+wget -q -O "$DIR/client/app.js"            "$BASE/client/app.js"            || { log "FEHLER: app.js"; exit 1; }
+wget -q -O "$DIR/server/index.js"          "$BASE/server/index.js"          || { log "FEHLER: index.js"; exit 1; }
+wget -q -O "$DIR/server/package.json"      "$BASE/server/package.json"      || { log "FEHLER: package.json"; exit 1; }
+wget -q -O "$DIR/server/routes/export.js" "$BASE/server/routes/export.js" || { log "FEHLER: export.js"; exit 1; }
+wget -q -O "$DIR/Dockerfile"               "$BASE/Dockerfile"               || { log "FEHLER: Dockerfile"; exit 1; }
+wget -q -O "$DIR/docker-compose.yml"       "$BASE/docker-compose.yml"       || { log "FEHLER: docker-compose.yml"; exit 1; }
+wget -q -O "$DIR/update.sh"                "$BASE/update.sh"                || { log "FEHLER: update.sh"; exit 1; }
+log "[1/3] Download abgeschlossen."
 
-# If no .git folder (e.g. after manual file copy), initialize git first
-if [ ! -d ".git" ]; then
-  log "[0/3] Kein Git-Repository gefunden - initialisiere..."
-  git init >> "$LOG_FILE" 2>&1
-  git remote add origin "$REPO" >> "$LOG_FILE" 2>&1
-  git fetch origin >> "$LOG_FILE" 2>&1 || { log "FEHLER: git fetch fehlgeschlagen - Internetverbindung pruefen"; exit 1; }
-  git reset --hard origin/main >> "$LOG_FILE" 2>&1
-  log "[0/3] Git initialisiert."
-fi
-
-log "[1/3] Code aktualisieren..."
-git fetch origin >> "$LOG_FILE" 2>&1 || { log "FEHLER: git fetch fehlgeschlagen - Internetverbindung pruefen"; exit 1; }
-git reset --hard origin/main >> "$LOG_FILE" 2>&1
+cd "$DIR" || { log "FEHLER: cd $DIR fehlgeschlagen"; exit 1; }
 
 log "[2/3] Docker-Image neu bauen..."
-docker compose build --no-cache >> "$LOG_FILE" 2>&1 || { log "FEHLER: docker compose build fehlgeschlagen"; exit 1; }
+docker compose -f "$DIR/docker-compose.yml" down >> "$LOG_FILE" 2>&1
+docker compose -f "$DIR/docker-compose.yml" build --no-cache >> "$LOG_FILE" 2>&1 || { log "FEHLER: docker compose build fehlgeschlagen"; exit 1; }
 
 log "[3/3] Container neustarten..."
-docker compose up -d >> "$LOG_FILE" 2>&1 || { log "FEHLER: docker compose up fehlgeschlagen"; exit 1; }
+docker compose -f "$DIR/docker-compose.yml" up -d >> "$LOG_FILE" 2>&1 || { log "FEHLER: docker compose up fehlgeschlagen"; exit 1; }
 
-VERSION=$(grep '"version"' server/package.json | head -1 | sed 's/.*"\([0-9.]*\)".*/\1/')
+VERSION=$(grep '"version"' "$DIR/server/package.json" | head -1 | sed 's/.*"\([0-9.]*\)".*/\1/')
 log ""
 log "SUCCESS Update abgeschlossen: $(date '+%Y-%m-%d %H:%M:%S')"
 log "Version: v${VERSION}"
