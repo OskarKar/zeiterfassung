@@ -1199,44 +1199,214 @@ async function handleUpdateEntry(e) {
   }
 }
 
+// ==================== IMPORT HELPERS ====================
+
+const DE_MONTHS = {
+  'jan': '01', 'jän': '01', 'feb': '02', 'mär': '03', 'mar': '03', 'apr': '04',
+  'mai': '05', 'jun': '06', 'jul': '07', 'aug': '08',
+  'sep': '09', 'okt': '10', 'nov': '11', 'dez': '12',
+};
+
+function parseExcelDateString(datumStr, year) {
+  if (!datumStr || typeof datumStr !== 'string') return null;
+  const m = datumStr.trim().match(/^(\d{1,2})\.(\w{3})\.?$/);
+  if (!m) return null;
+  const day = m[1].padStart(2, '0');
+  const monKey = m[2].toLowerCase().slice(0, 3);
+  const mon = DE_MONTHS[monKey];
+  if (!mon || !year) return null;
+  return `${year}-${mon}-${day}`;
+}
+
+function excelFractionToTime(val) {
+  if (val === null || val === undefined || val === '') return '';
+  if (typeof val === 'string') {
+    const m = val.match(/^(\d{1,2}):(\d{2})/);
+    if (m) return m[1].padStart(2, '0') + ':' + m[2];
+    return val;
+  }
+  if (typeof val === 'number') {
+    const totalMin = Math.round(val * 24 * 60);
+    const h = Math.floor(totalMin / 60) % 24;
+    const min = totalMin % 60;
+    return String(h).padStart(2, '0') + ':' + String(min).padStart(2, '0');
+  }
+  return '';
+}
+
+function extractMetaFromFilename(filename) {
+  const nameNoExt = filename.replace(/\.[^/.]+$/, '');
+  const parts = nameNoExt.split('_');
+  let month = '', year = '', employeeName = '';
+  if (parts.length >= 2) {
+    const dateParts = parts[0].split('-');
+    if (dateParts.length === 2) {
+      month = dateParts[0].padStart(2, '0');
+      year = dateParts[1];
+    }
+    employeeName = parts.slice(1).join(' ');
+  }
+  return { month, year, employeeName };
+}
+
+// Extract name from header row (row 0): right-most non-empty cell
+// Extract period from header row: left-most non-empty cell → parse month+year
+function extractMetaFromHeader(row0) {
+  if (!row0 || !row0.length) return { nameFromHeader: '', yearFromHeader: '', monthFromHeader: '' };
+
+  // Find leftmost and rightmost non-empty cells
+  let left = '', right = '';
+  for (let i = 0; i < row0.length; i++) {
+    const v = String(row0[i] || '').trim();
+    if (v) { if (!left) left = v; right = v; }
+  }
+
+  // Parse name from right cell (may be just the surname)
+  const nameFromHeader = right !== left ? right : '';
+
+  // Parse year from left cell e.g. "Jänner 2025" or "01/2025" or "2025-01"
+  let yearFromHeader = '', monthFromHeader = '';
+  const yearMatch = left.match(/\b(20\d{2})\b/);
+  if (yearMatch) yearFromHeader = yearMatch[1];
+
+  // Try to extract month name
+  const lowerLeft = left.toLowerCase();
+  for (const [key, val] of Object.entries(DE_MONTHS)) {
+    if (lowerLeft.includes(key)) { monthFromHeader = val; break; }
+  }
+  // Fallback: numeric month like "01/2025" or "2025-01"
+  if (!monthFromHeader) {
+    const numM = left.match(/\b(0?[1-9]|1[0-2])\b/);
+    if (numM) monthFromHeader = numM[1].padStart(2, '0');
+  }
+
+  return { nameFromHeader, yearFromHeader, monthFromHeader };
+}
+
+// Returns Promise<{ records, nameFromHeader, yearFromHeader, monthFromHeader }>
+function parseExcelFile(file, fallbackYear) {
+  return new Promise((resolve, reject) => {
+    const XLSX = window.XLSX;
+    if (!XLSX) { reject(new Error('xlsx Bibliothek nicht geladen.')); return; }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const buffer = event.target.result;
+        const workbook = XLSX.read(buffer, { type: 'array' });
+        const ws = workbook.Sheets[workbook.SheetNames[0]];
+        const jsonData = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: '' });
+
+        // Extract meta from header row 0
+        const { nameFromHeader, yearFromHeader, monthFromHeader } = extractMetaFromHeader(jsonData[0] || []);
+        const year = yearFromHeader || fallbackYear;
+
+        const records = [];
+        // Row 0 = header, Row 1 = taggeld-satz info, data starts at Row 2
+        for (let i = 2; i < jsonData.length; i++) {
+          const row = jsonData[i];
+          if (!row || row.length === 0) continue;
+
+          const wochentag  = row[0] || '';
+          const datumRaw   = row[1];
+          const tourname   = row[2] || '';
+          const abfahrtRaw = row[3];
+          const ankunftRaw = row[4];
+          const stundenRaw = row[5];
+          const taggeldRaw = row[6];
+
+          if (!datumRaw && datumRaw !== 0) continue;
+
+          let dateISO = null, datumAnzeige = '';
+          if (typeof datumRaw === 'number') {
+            const utcMs = (datumRaw - 25569) * 86400 * 1000;
+            const d = new Date(utcMs);
+            dateISO = d.toISOString().slice(0, 10);
+            datumAnzeige = d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+          } else if (typeof datumRaw === 'string' && datumRaw.includes('.')) {
+            dateISO = parseExcelDateString(datumRaw, year);
+            datumAnzeige = datumRaw;
+          }
+
+          if (!dateISO) continue;
+          if (!tourname && !abfahrtRaw && !stundenRaw) continue;
+
+          records.push({
+            wochentag,
+            dateISO,
+            datumAnzeige,
+            tourname,
+            abfahrt: excelFractionToTime(abfahrtRaw),
+            ankunft: excelFractionToTime(ankunftRaw),
+            stunden: stundenRaw ? parseFloat(stundenRaw).toFixed(2) : '',
+            taggeld: taggeldRaw ? parseFloat(taggeldRaw).toFixed(2) : '',
+          });
+        }
+
+        resolve({ records, nameFromHeader, yearFromHeader, monthFromHeader });
+      } catch (err) {
+        reject(err);
+      }
+    };
+    reader.onerror = () => reject(new Error('Datei konnte nicht gelesen werden.'));
+    reader.readAsArrayBuffer(file);
+  });
+}
+
 // ==================== MULTI-FILE IMPORT ====================
 async function handleExcelImportMulti(files) {
   const statusEl = document.getElementById('import-multi-status');
   if (!statusEl) return;
 
   for (const file of files) {
-    const rowId = `imp-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const row = document.createElement('div');
-    row.id = rowId;
-    row.className = 'flex items-center gap-3 py-2 border-b border-gray-100 text-sm';
-    row.innerHTML = `<span class="text-gray-400">⏳</span><span class="flex-1 text-gray-700 truncate">${file.name}</span><span class="text-xs text-gray-400">Warte...</span>`;
+    row.className = 'flex items-center gap-3 px-4 py-2 text-sm bg-white';
+    row.innerHTML = `<span>⏳</span><span class="flex-1 text-gray-700 truncate">${file.name}</span><span class="text-xs text-gray-400">Warte…</span>`;
     statusEl.appendChild(row);
 
     const setStatus = (icon, msg, cls) => {
       row.innerHTML = `<span>${icon}</span><span class="flex-1 text-gray-700 truncate">${file.name}</span><span class="text-xs ${cls}">${msg}</span>`;
     };
 
-    setStatus('🔄', 'Lese...', 'text-blue-500');
+    setStatus('🔄', 'Lese…', 'text-blue-500');
     try {
       const meta = extractMetaFromFilename(file.name);
-      const records = await parseExcelFile(file, meta.year);
+      const { records, nameFromHeader } = await parseExcelFile(file, meta.year);
 
-      // Try to match employee by name
+      // Prefer name from Excel header, fallback to filename
+      const nameToMatch = (nameFromHeader || meta.employeeName || '').toLowerCase().trim();
+
+      if (!nameToMatch) {
+        setStatus('⚠️', 'Name nicht erkannt (Kopfzeile + Dateiname leer)', 'text-amber-600');
+        continue;
+      }
+
       const empMatch = state.employees.find(emp =>
-        !emp.is_boss && emp.name.toLowerCase().includes(meta.employeeName.toLowerCase())
+        !emp.is_boss && emp.name.toLowerCase().includes(nameToMatch)
+      ) || state.employees.find(emp =>
+        !emp.is_boss && nameToMatch.includes(emp.name.toLowerCase())
       );
+
       if (!empMatch) {
-        setStatus('⚠️', `Mitarbeiter "${meta.employeeName}" nicht gefunden`, 'text-amber-600');
+        setStatus('⚠️', `Mitarbeiter "${nameFromHeader || meta.employeeName}" nicht gefunden`, 'text-amber-600');
         continue;
       }
       if (!records.length) {
-        setStatus('⚠️', 'Keine Zeilen gefunden', 'text-amber-600');
+        setStatus('⚠️', 'Keine Datenzeilen gefunden', 'text-amber-600');
         continue;
       }
 
-      setStatus('🔄', `${records.length} Zeilen speichern...`, 'text-blue-500');
-      const result = await api('POST', '/import/records', { employee_id: empMatch.id, records });
-      setStatus('✅', `${result.inserted ?? records.length} importiert`, 'text-green-600');
+      setStatus('🔄', `${records.length} Zeilen → ${empMatch.name}…`, 'text-blue-500');
+      const apiRecords = records.map(r => ({
+        date: r.dateISO,
+        start_time: r.abfahrt || null,
+        end_time: r.ankunft || null,
+        description: r.tourname || '',
+        stunden: r.stunden,
+        taggeld: r.taggeld,
+      }));
+      const result = await api('POST', '/import/records', { employee_id: empMatch.id, records: apiRecords });
+      setStatus('✅', `${result.inserted ?? 0} neu, ${result.updated ?? 0} aktualisiert → ${empMatch.name}`, 'text-green-600');
     } catch (err) {
       setStatus('❌', err.message, 'text-red-500');
     }
@@ -1596,205 +1766,6 @@ async function handleStatsTasks() {
     container.innerHTML = html;
   } catch (e) {
     container.innerHTML = `<span class="text-red-500">Fehler: ${e.message}</span>`;
-  }
-}
-
-// ==================== IMPORT HANDLER ====================
-
-// German month abbreviations used in Excel ("01.Nov" etc.)
-const DE_MONTHS = {
-  'jan': '01', 'feb': '02', 'mär': '03', 'mar': '03', 'apr': '04',
-  'mai': '05', 'jun': '06', 'jul': '07', 'aug': '08',
-  'sep': '09', 'okt': '10', 'nov': '11', 'dez': '12'
-};
-
-// Parse "01.Nov" + year "2025" → "2025-11-01"
-function parseExcelDateString(datumStr, year) {
-  if (!datumStr || typeof datumStr !== 'string') return null;
-  // Format: "01.Nov" or "01.Nov."
-  const m = datumStr.trim().match(/^(\d{1,2})\.(\w{3})\.?$/);
-  if (!m) return null;
-  const day = m[1].padStart(2, '0');
-  const monKey = m[2].toLowerCase().slice(0, 3);
-  const mon = DE_MONTHS[monKey];
-  if (!mon || !year) return null;
-  return `${year}-${mon}-${day}`;
-}
-
-// Convert Excel time fraction (e.g. 0.208333) → "05:00"
-function excelFractionToTime(val) {
-  if (val === null || val === undefined || val === '') return '';
-  if (typeof val === 'string') {
-    // Already formatted as "5:00" by xlsx with { raw: false }
-    const m = val.match(/^(\d{1,2}):(\d{2})/);
-    if (m) return m[1].padStart(2, '0') + ':' + m[2];
-    return val;
-  }
-  if (typeof val === 'number') {
-    const totalMin = Math.round(val * 24 * 60);
-    const h = Math.floor(totalMin / 60) % 24;
-    const min = totalMin % 60;
-    return String(h).padStart(2, '0') + ':' + String(min).padStart(2, '0');
-  }
-  return '';
-}
-
-// Extract metadata from filename "11-2025_Mustermann.xlsx"
-function extractMetaFromFilename(filename) {
-  const nameNoExt = filename.replace(/\.[^/.]+$/, '');
-  const parts = nameNoExt.split('_');
-  let month = '', year = '', employeeName = '';
-  if (parts.length >= 2) {
-    const dateParts = parts[0].split('-');
-    if (dateParts.length === 2) {
-      month = dateParts[0].padStart(2, '0');
-      year = dateParts[1];
-    }
-    employeeName = parts.slice(1).join(' ');
-  }
-  return { month, year, employeeName };
-}
-
-function handleExcelImport(file) {
-  importState.fileName = file.name;
-  const meta = extractMetaFromFilename(file.name);
-  importState.metadata = meta;
-  importState.parsedRecords = [];
-
-  // Re-render the tab immediately to show loading state
-  const tabContent = document.querySelector('.bg-white.rounded-2xl.shadow-sm.p-6');
-  if (tabContent) tabContent.innerHTML = renderImport();
-  attachListeners();
-
-  const reader = new FileReader();
-  reader.onload = (event) => {
-    try {
-      // Dynamically load xlsx from CDN-compatible global (already loaded via script tag)
-      const XLSX = window.XLSX;
-      if (!XLSX) throw new Error('xlsx Bibliothek nicht geladen.');
-
-      const buffer = event.target.result;
-      const workbook = XLSX.read(buffer, { type: 'array' });
-      const ws = workbook.Sheets[workbook.SheetNames[0]];
-
-      // Use raw: true to get numbers for times/dates
-      const jsonData = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: '' });
-
-      const records = [];
-
-      // Row 0 = header, Row 1 = taggeld-satz, data starts at Row 2
-      for (let i = 2; i < jsonData.length; i++) {
-        const row = jsonData[i];
-        if (!row || row.length === 0) continue;
-
-        const wochentag  = row[0] || '';
-        const datumRaw   = row[1];        // number (Excel serial) OR string "01.Nov"
-        const tourname   = row[2] || '';  // may be empty (e.g. Mustermann R20)
-        const abfahrtRaw = row[3];
-        const ankunftRaw = row[4];
-        const stundenRaw = row[5];
-        const taggeldRaw = row[6];
-
-        // Skip if no date at all
-        if (!datumRaw && datumRaw !== 0) continue;
-
-        // Parse date
-        let dateISO = null;
-        let datumAnzeige = '';
-        if (typeof datumRaw === 'number') {
-          // Excel serial date → ISO
-          const utcMs = (datumRaw - 25569) * 86400 * 1000;
-          const d = new Date(utcMs);
-          dateISO = d.toISOString().slice(0, 10);
-          datumAnzeige = d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
-        } else if (typeof datumRaw === 'string' && datumRaw.includes('.')) {
-          // String like "01.Nov" — use year from metadata
-          dateISO = parseExcelDateString(datumRaw, meta.year);
-          datumAnzeige = datumRaw;
-        }
-
-        if (!dateISO) continue;
-
-        // Skip completely empty workday rows (no tour AND no times)
-        const hasData = tourname || abfahrtRaw || stundenRaw;
-        if (!hasData) continue;
-
-        const abfahrt = excelFractionToTime(abfahrtRaw);
-        const ankunft = excelFractionToTime(ankunftRaw);
-        const stunden = stundenRaw ? parseFloat(stundenRaw).toFixed(2) : '';
-        const taggeld = taggeldRaw ? parseFloat(taggeldRaw).toFixed(2) : '';
-
-        records.push({ wochentag, dateISO, datumAnzeige, tourname, abfahrt, ankunft, stunden, taggeld });
-      }
-
-      importState.parsedRecords = records;
-
-      // Re-render with preview
-      if (tabContent) tabContent.innerHTML = renderImport();
-      attachListeners();
-
-      // Wire the save button
-      const saveBtn = document.getElementById('import-save-btn');
-      if (saveBtn) saveBtn.addEventListener('click', handleImportSave);
-
-    } catch (err) {
-      const resultEl = document.getElementById('import-result');
-      if (resultEl) resultEl.innerHTML = `<div class="bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-700">❌ Fehler beim Lesen: ${err.message}</div>`;
-    }
-  };
-  reader.readAsArrayBuffer(file);
-}
-
-async function handleImportSave() {
-  const empId = document.getElementById('import-emp')?.value;
-  const month = document.getElementById('import-month')?.value;
-  const year  = document.getElementById('import-year')?.value;
-
-  if (!empId) { alert('Bitte Mitarbeiter auswählen.'); return; }
-  if (!month || !year) { alert('Bitte Monat und Jahr prüfen.'); return; }
-
-  const resultEl = document.getElementById('import-result');
-  const saveBtn  = document.getElementById('import-save-btn');
-  if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Importiere…'; }
-
-  // Build payload matching the backend's expected structure
-  const records = importState.parsedRecords.map(r => ({
-    date: r.dateISO,
-    start_time: r.abfahrt || null,
-    end_time: r.ankunft || null,
-    description: r.tourname || '',
-    stunden: r.stunden,
-    taggeld: r.taggeld,
-  }));
-
-  try {
-    const res = await fetch('/api/import/records', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ employee_id: parseInt(empId), records }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || res.statusText);
-
-    let html = `<div class="bg-green-50 border border-green-200 rounded-xl p-4 text-sm text-green-800 mb-3">
-      <div class="font-semibold mb-1">✅ Import abgeschlossen</div>
-      <div>Neu importiert: <strong>${data.inserted}</strong> Einträge</div>
-      <div>Aktualisiert: <strong>${data.updated}</strong> Einträge</div>`;
-    if (data.errors && data.errors.length > 0) {
-      html += `<div class="mt-2 text-red-700"><strong>Fehler (${data.errors.length}):</strong><br>${data.errors.slice(0,5).join('<br>')}</div>`;
-    }
-    html += `</div>`;
-    if (resultEl) resultEl.innerHTML = html;
-    showToast(`✅ ${data.inserted} importiert, ${data.updated} aktualisiert`);
-
-    // Reset import state
-    importState.parsedRecords = [];
-    importState.fileName = '';
-    importState.metadata = { month: '', year: '', employeeName: '' };
-
-  } catch (e) {
-    if (resultEl) resultEl.innerHTML = `<div class="bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-700">❌ Fehler: ${e.message}</div>`;
-    if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Daten in die Datenbank importieren'; }
   }
 }
 
