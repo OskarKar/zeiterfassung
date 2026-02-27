@@ -1,0 +1,23 @@
+# Datenbank – NIEMALS in Git einchecken
+data/
+
+# Temporäre / Dev-Dateien
+*.xlsx
+"Excel Import.js"
+Excel\ Import.js
+
+# Node-Module
+node_modules/
+server/node_modules/
+
+# Temporäre Analyse-Skripte
+analyze_*.js
+test_*.js
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
