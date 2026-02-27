@@ -8,6 +8,9 @@ const state = {
   entries: [],
   filterMonth: new Date().toISOString().slice(0, 7),
   filterEmployee: '',
+  filterCategory: '',
+  sortCol: 'date',
+  sortDir: 'desc',
   typingTimeout: null,
   editingEntryId: null,
   appVersion: '',
@@ -281,54 +284,93 @@ function renderErfassung() {
   </form>`;
 }
 
+// ==================== YEAR/MONTH HELPER ====================
+const CAT_LABELS = {
+  kehrtour: 'Kehrtour', buero: 'Büro', krankenstand: 'Krankenstand',
+  urlaub: 'Urlaub', betriebsurlaub: 'Betriebsurlaub',
+  fortbildung: 'Fortbildung', feiertag: 'Feiertag',
+};
+
+function buildYearOpts(selYear) {
+  const now = new Date().getFullYear();
+  return Array.from({ length: 6 }, (_, i) => now - i)
+    .map(y => `<option value="${y}" ${String(y) === String(selYear) ? 'selected' : ''}>${y}</option>`).join('');
+}
+
+function buildMonthOpts(selMonth) {
+  return Array.from({ length: 12 }, (_, i) => {
+    const m = String(i + 1).padStart(2, '0');
+    const label = new Date(2000, i, 1).toLocaleString('de-DE', { month: 'long' });
+    return `<option value="${m}" ${m === selMonth ? 'selected' : ''}>${label}</option>`;
+  }).join('');
+}
+
+function buildCatOpts(sel) {
+  return '<option value="">Alle Kategorien</option>' +
+    Object.entries(CAT_LABELS).map(([k, v]) =>
+      `<option value="${k}" ${sel === k ? 'selected' : ''}>${v}</option>`
+    ).join('');
+}
+
 // ==================== ÜBERSICHT TAB ====================
 function renderUebersicht() {
+  const [selYear, selMonth] = state.filterMonth.split('-');
   return `
   <h2 class="text-xl font-bold text-gray-800 mb-4">📋 Meine Einträge</h2>
-  <div class="flex gap-3 mb-4 items-end">
+  <div class="flex gap-3 mb-4 flex-wrap items-end">
+    <div>
+      <label class="block text-xs font-semibold text-gray-500 mb-1">Jahr</label>
+      <select id="my-year" class="border-2 border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:border-blue-500 text-sm">${buildYearOpts(selYear)}</select>
+    </div>
     <div>
       <label class="block text-xs font-semibold text-gray-500 mb-1">Monat</label>
-      <input type="month" id="my-month" value="${state.filterMonth}"
-        class="border-2 border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:border-blue-500 text-sm" />
+      <select id="my-month-sel" class="border-2 border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:border-blue-500 text-sm">${buildMonthOpts(selMonth)}</select>
+    </div>
+    <div>
+      <label class="block text-xs font-semibold text-gray-500 mb-1">Kategorie</label>
+      <select id="my-cat" class="border-2 border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:border-blue-500 text-sm">${buildCatOpts(state.filterCategory)}</select>
     </div>
     <button data-action="load-my-entries"
       class="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-blue-700 transition">
       Anzeigen
     </button>
   </div>
-  <div id="entries-content">
-    <p class="text-gray-400 text-sm">Lade Einträge…</p>
-  </div>`;
+  <div id="entries-content"><p class="text-gray-400 text-sm">Lade Einträge…</p></div>`;
 }
 
 // ==================== ALLE EINTRÄGE TAB ====================
 function renderAlle() {
+  const [selYear, selMonth] = state.filterMonth.split('-');
   return `
   <h2 class="text-xl font-bold text-gray-800 mb-4">📊 Alle Einträge</h2>
   <div class="flex gap-3 mb-4 flex-wrap items-end">
     <div>
+      <label class="block text-xs font-semibold text-gray-500 mb-1">Jahr</label>
+      <select id="filter-year" class="border-2 border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:border-blue-500 text-sm">${buildYearOpts(selYear)}</select>
+    </div>
+    <div>
       <label class="block text-xs font-semibold text-gray-500 mb-1">Monat</label>
-      <input type="month" id="filter-month" value="${state.filterMonth}"
-        class="border-2 border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:border-blue-500 text-sm" />
+      <select id="filter-month-sel" class="border-2 border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:border-blue-500 text-sm">${buildMonthOpts(selMonth)}</select>
     </div>
     <div>
       <label class="block text-xs font-semibold text-gray-500 mb-1">Mitarbeiter</label>
-      <select id="filter-emp"
-        class="border-2 border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:border-blue-500 text-sm">
-        <option value="">Alle</option>
-        ${state.employees.filter(e => !e.is_boss).map(emp => `
-          <option value="${emp.id}" ${state.filterEmployee == emp.id ? 'selected' : ''}>${emp.name}</option>
-        `).join('')}
+      <select id="filter-emp" class="border-2 border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:border-blue-500 text-sm">
+        <option value="">Alle Mitarbeiter</option>
+        ${state.employees.filter(e => !e.is_boss).map(emp =>
+          `<option value="${emp.id}" ${state.filterEmployee == emp.id ? 'selected' : ''}>${emp.name}</option>`
+        ).join('')}
       </select>
+    </div>
+    <div>
+      <label class="block text-xs font-semibold text-gray-500 mb-1">Kategorie</label>
+      <select id="filter-cat" class="border-2 border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:border-blue-500 text-sm">${buildCatOpts(state.filterCategory)}</select>
     </div>
     <button data-action="load-all-entries"
       class="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-blue-700 transition">
       Filtern
     </button>
   </div>
-  <div id="entries-content">
-    <p class="text-gray-400 text-sm">Lade Einträge…</p>
-  </div>`;
+  <div id="entries-content"><p class="text-gray-400 text-sm">Lade Einträge…</p></div>`;
 }
 
 // ==================== MITARBEITER TAB ====================
@@ -487,37 +529,52 @@ function renderAuditLog() {
 
 // ==================== EXPORT TAB ====================
 function renderExport() {
-  const currentMonth = new Date().toISOString().slice(0, 7);
+  const [selYear, selMonth] = state.filterMonth.split('-');
   return `
   <h2 class="text-xl font-bold text-gray-800 mb-6">📥 PDF Export</h2>
 
-  <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-    <div>
-      <label class="block text-sm font-semibold text-gray-600 mb-1">Monat</label>
-      <input type="month" id="exp-month" value="${currentMonth}"
-        class="w-full border-2 border-gray-200 rounded-xl px-4 py-2.5 focus:outline-none focus:border-blue-500" />
+  <div class="border border-gray-200 rounded-xl p-5 mb-5">
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+      <div>
+        <label class="block text-sm font-semibold text-gray-600 mb-1">Jahr</label>
+        <select id="exp-year"
+          class="w-full border-2 border-gray-200 rounded-xl px-4 py-2.5 focus:outline-none focus:border-blue-500">
+          ${buildYearOpts(selYear)}
+        </select>
+      </div>
+      <div>
+        <label class="block text-sm font-semibold text-gray-600 mb-1">Monat</label>
+        <select id="exp-month-sel"
+          class="w-full border-2 border-gray-200 rounded-xl px-4 py-2.5 focus:outline-none focus:border-blue-500">
+          ${buildMonthOpts(selMonth)}
+        </select>
+      </div>
+      <div>
+        <label class="block text-sm font-semibold text-gray-600 mb-1">Mitarbeiter</label>
+        <select id="exp-employee"
+          class="w-full border-2 border-gray-200 rounded-xl px-4 py-2.5 focus:outline-none focus:border-blue-500">
+          <option value="">Alle Mitarbeiter</option>
+          ${state.employees.filter(e => !e.is_boss).map(emp =>
+            `<option value="${emp.id}">${emp.name}</option>`
+          ).join('')}
+        </select>
+      </div>
+      <div class="flex items-end">
+        <button data-action="export-pdf"
+          class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 px-6 rounded-xl transition">
+          📄 PDF herunterladen
+        </button>
+      </div>
     </div>
-    <div>
-      <label class="block text-sm font-semibold text-gray-600 mb-1">Mitarbeiter</label>
-      <select id="exp-employee"
-        class="w-full border-2 border-gray-200 rounded-xl px-4 py-2.5 focus:outline-none focus:border-blue-500">
-        <option value="">Alle Mitarbeiter</option>
-        ${state.employees.filter(e => !e.is_boss).map(emp => `
-          <option value="${emp.id}">${emp.name}</option>
-        `).join('')}
-      </select>
-    </div>
-    <div class="flex items-end">
-      <button data-action="export-pdf"
-        class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 px-6 rounded-xl transition">
-        📄 PDF herunterladen
-      </button>
+    <div class="flex items-center gap-3 pt-1">
+      <input type="checkbox" id="exp-no-sig" class="w-4 h-4 accent-blue-600">
+      <label for="exp-no-sig" class="text-sm text-gray-600 cursor-pointer">Ohne Unterschriftfelder exportieren</label>
     </div>
   </div>
 
   <div class="bg-blue-50 border border-blue-200 rounded-xl p-4 text-sm text-blue-700">
     <strong>Format:</strong> Monatsbericht im Lohnverrechnungs-Format mit allen Tagen,
-    Abfahrt/Ankunft, Stunden, Taggeld und Trinkgeld. Inklusive Summenzeile und Unterschriftsfeldern.
+    Abfahrt/Ankunft, Stunden, Taggeld und Trinkgeld.
   </div>`;
 }
 
@@ -559,23 +616,117 @@ function renderEinstellungen() {
 }
 
 // ==================== ENTRIES TABLE RENDER ====================
-function renderEntriesTable(entries, showEmployee = false, allowDelete = false) {
+function sortIcon(col) {
+  if (state.sortCol !== col) return '<span class="text-gray-300 ml-0.5">&#8597;</span>';
+  return state.sortDir === 'asc'
+    ? '<span class="text-blue-500 ml-0.5">&#8593;</span>'
+    : '<span class="text-blue-500 ml-0.5">&#8595;</span>';
+}
+
+function sortedEntries(entries) {
+  const col = state.sortCol;
+  const dir = state.sortDir === 'asc' ? 1 : -1;
+  return [...entries].sort((a, b) => {
+    let va = a[col] ?? '', vb = b[col] ?? '';
+    if (col === 'net_minutes' || col === 'tip') { va = Number(va) || 0; vb = Number(vb) || 0; }
+    if (va < vb) return -dir;
+    if (va > vb) return dir;
+    return 0;
+  });
+}
+
+function renderEntriesTable(entries, showEmployee = false, allowEdit = false) {
+  // Client-side category filter
+  if (state.filterCategory) entries = entries.filter(e => e.category === state.filterCategory);
+
   if (entries.length === 0) {
     return `<div class="text-center py-8 text-gray-400">Keine Einträge für diesen Zeitraum.</div>`;
   }
 
-  const catLabels = {
-    kehrtour: 'Kehrtour', buero: 'Büro', krankenstand: 'Krankenstand',
-    urlaub: 'Urlaub', betriebsurlaub: 'Betriebsurlaub',
-    fortbildung: 'Fortbildung', feiertag: 'Feiertag',
-  };
-
   const totalNet = entries.reduce((s, e) => s + (e.net_minutes || 0), 0);
   const totalTip = entries.reduce((s, e) => s + (e.tip || 0), 0);
   const workDays = new Set(entries.map(e => e.date)).size;
+  const sorted = sortedEntries(entries);
+
+  const th = (col, label, align = 'left') =>
+    `<th class="py-2 px-2 cursor-pointer select-none hover:text-blue-600 text-${align} whitespace-nowrap"
+        data-action="sort-col" data-col="${col}">${label}${sortIcon(col)}</th>`;
+
+  const catOpts = Object.entries(CAT_LABELS)
+    .map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
+
+  const rows = sorted.map(e => {
+    if (state.editingEntryId === e.id) {
+      const colspan = 6 + (showEmployee ? 1 : 0) + (allowEdit ? 1 : 0);
+      return `
+      <tr class="border-b border-blue-100 bg-blue-50">
+        <td colspan="${colspan}" class="px-3 py-3">
+          <form id="edit-entry-form" data-id="${e.id}" class="grid grid-cols-2 md:grid-cols-4 gap-3 items-end">
+            <div>
+              <label class="block text-xs font-semibold text-gray-500 mb-1">Datum</label>
+              <input type="date" name="date" value="${e.date}" required
+                class="w-full border-2 border-gray-200 rounded-xl px-2 py-1.5 text-sm focus:outline-none focus:border-blue-500" />
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-gray-500 mb-1">Kategorie</label>
+              <select name="category" class="w-full border-2 border-gray-200 rounded-xl px-2 py-1.5 text-sm focus:outline-none focus:border-blue-500">
+                ${catOpts.replace(`value="${e.category}"`, `value="${e.category}" selected`)}
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-gray-500 mb-1">Abfahrt</label>
+              <input type="time" name="start_time" value="${e.start_time || ''}"
+                class="w-full border-2 border-gray-200 rounded-xl px-2 py-1.5 text-sm focus:outline-none focus:border-blue-500" />
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-gray-500 mb-1">Ankunft</label>
+              <input type="time" name="end_time" value="${e.end_time || ''}"
+                class="w-full border-2 border-gray-200 rounded-xl px-2 py-1.5 text-sm focus:outline-none focus:border-blue-500" />
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-gray-500 mb-1">Trinkgeld (€)</label>
+              <input type="number" name="tip" value="${e.tip || 0}" step="0.01" min="0"
+                class="w-full border-2 border-gray-200 rounded-xl px-2 py-1.5 text-sm focus:outline-none focus:border-blue-500" />
+            </div>
+            <div class="md:col-span-2">
+              <label class="block text-xs font-semibold text-gray-500 mb-1">Beschreibung</label>
+              <input type="text" name="description" value="${(e.description || '').replace(/"/g, '&quot;')}"
+                class="w-full border-2 border-gray-200 rounded-xl px-2 py-1.5 text-sm focus:outline-none focus:border-blue-500" />
+            </div>
+            <div class="flex gap-2">
+              <button type="submit" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold py-1.5 px-2 rounded-xl transition">✅ Speichern</button>
+              <button type="button" data-action="cancel-edit-entry" class="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-700 text-xs font-semibold py-1.5 px-2 rounded-xl transition">Abbrechen</button>
+            </div>
+          </form>
+        </td>
+      </tr>`;
+    }
+    return `
+    <tr class="border-b border-gray-50 hover:bg-gray-50">
+      <td class="py-2 px-2 font-medium whitespace-nowrap">
+        ${new Date(e.date + 'T12:00:00').toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' })}
+      </td>
+      ${showEmployee ? `<td class="py-2 px-2 whitespace-nowrap">${e.employee_name || ''}</td>` : ''}
+      <td class="py-2 px-2">
+        <span class="px-2 py-0.5 rounded-full text-xs font-medium ${categoryBadge(e.category)}">
+          ${CAT_LABELS[e.category] || e.category}
+        </span>
+      </td>
+      <td class="py-2 px-2 text-gray-600 whitespace-nowrap">${e.start_time || '—'} – ${e.end_time || '—'}</td>
+      <td class="py-2 px-2 text-right font-mono">${e.net_minutes ? (e.net_minutes / 60).toFixed(2) : '—'}</td>
+      <td class="py-2 px-2 text-right text-green-700">${e.tip > 0 ? `€ ${e.tip.toFixed(2)}` : '—'}</td>
+      <td class="py-2 px-2 text-gray-500 max-w-xs truncate">${e.description || '—'}</td>
+      ${allowEdit ? `
+        <td class="py-2 px-2 whitespace-nowrap text-right">
+          <button data-action="edit-entry" data-id="${e.id}"
+            class="text-blue-400 hover:text-blue-600 text-xs px-2 py-1 rounded hover:bg-blue-50 transition mr-1">✏️</button>
+          <button data-action="delete-entry" data-id="${e.id}"
+            class="text-red-400 hover:text-red-600 text-xs px-2 py-1 rounded hover:bg-red-50 transition">🗑️</button>
+        </td>` : ''}
+    </tr>`;
+  }).join('');
 
   return `
-  <!-- Summary cards -->
   <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
     <div class="bg-gray-50 rounded-xl p-3 text-center">
       <div class="text-xs text-gray-500 uppercase font-semibold mb-1">Arbeitstage</div>
@@ -594,48 +745,21 @@ function renderEntriesTable(entries, showEmployee = false, allowDelete = false) 
       <div class="text-2xl font-bold text-green-700">€ ${totalTip.toFixed(2)}</div>
     </div>
   </div>
-
-  <!-- Table -->
   <div class="overflow-x-auto">
     <table class="w-full text-sm">
       <thead>
-        <tr class="border-b-2 border-gray-100 text-gray-500 font-semibold">
-          <th class="text-left py-2 px-2">Datum</th>
-          ${showEmployee ? '<th class="text-left py-2 px-2">Mitarbeiter</th>' : ''}
-          <th class="text-left py-2 px-2">Kategorie</th>
-          <th class="text-left py-2 px-2">Zeit</th>
-          <th class="text-right py-2 px-2">Stunden</th>
-          <th class="text-right py-2 px-2">Trinkgeld</th>
-          <th class="text-left py-2 px-2">Beschreibung</th>
-          ${allowDelete ? '<th class="py-2 px-2"></th>' : ''}
+        <tr class="border-b-2 border-gray-100 text-gray-500 font-semibold text-xs uppercase">
+          ${th('date', 'Datum')}
+          ${showEmployee ? th('employee_name', 'Mitarbeiter') : ''}
+          ${th('category', 'Kategorie')}
+          ${th('start_time', 'Zeit')}
+          ${th('net_minutes', 'Stunden', 'right')}
+          ${th('tip', 'Trinkgeld', 'right')}
+          ${th('description', 'Beschreibung')}
+          ${allowEdit ? '<th class="py-2 px-2 w-20"></th>' : ''}
         </tr>
       </thead>
-      <tbody>
-        ${entries.map(e => `
-          <tr class="border-b border-gray-50 hover:bg-gray-50">
-            <td class="py-2 px-2 font-medium">
-              ${new Date(e.date + 'T12:00:00').toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' })}
-            </td>
-            ${showEmployee ? `<td class="py-2 px-2">${e.employee_name || ''}</td>` : ''}
-            <td class="py-2 px-2">
-              <span class="px-2 py-0.5 rounded-full text-xs font-medium ${categoryBadge(e.category)}">
-                ${catLabels[e.category] || e.category}
-              </span>
-            </td>
-            <td class="py-2 px-2 text-gray-600">${e.start_time || '—'} – ${e.end_time || '—'}</td>
-            <td class="py-2 px-2 text-right font-mono">${e.net_minutes ? (e.net_minutes / 60).toFixed(2) : '—'}</td>
-            <td class="py-2 px-2 text-right text-green-700">${e.tip > 0 ? `€ ${e.tip.toFixed(2)}` : '—'}</td>
-            <td class="py-2 px-2 text-gray-500">${e.description || '—'}</td>
-            ${allowDelete ? `
-              <td class="py-2 px-2">
-                <button data-action="delete-entry" data-id="${e.id}"
-                  class="text-red-400 hover:text-red-600 text-xs px-2 py-1 rounded hover:bg-red-50 transition">
-                  🗑️
-                </button>
-              </td>` : ''}
-          </tr>
-        `).join('')}
-      </tbody>
+      <tbody>${rows}</tbody>
     </table>
   </div>`;
 }
@@ -661,16 +785,24 @@ async function loadAndRenderEntries() {
   try {
     let entries;
     if (state.activeTab === 'uebersicht') {
-      const monthEl = document.getElementById('my-month');
-      const month = monthEl ? monthEl.value : state.filterMonth;
+      const year  = document.getElementById('my-year')?.value || state.filterMonth.slice(0, 4);
+      const month = document.getElementById('my-month-sel')?.value || state.filterMonth.slice(5, 7);
+      state.filterCategory = document.getElementById('my-cat')?.value || '';
+      const ym = `${year}-${month}`;
+      state.filterMonth = ym;
       const empId = state.isBoss ? '' : state.currentUser.id;
-      const qs = empId ? `?month=${month}&employee_id=${empId}` : `?month=${month}`;
+      const qs = empId ? `?month=${ym}&employee_id=${empId}` : `?month=${ym}`;
       entries = await api('GET', `/entries${qs}`);
       container.innerHTML = renderEntriesTable(entries, state.isBoss, state.isBoss);
     } else {
-      const month = state.filterMonth;
+      const year  = document.getElementById('filter-year')?.value || state.filterMonth.slice(0, 4);
+      const month = document.getElementById('filter-month-sel')?.value || state.filterMonth.slice(5, 7);
+      state.filterCategory = document.getElementById('filter-cat')?.value || '';
+      state.filterEmployee = document.getElementById('filter-emp')?.value || '';
+      const ym = `${year}-${month}`;
+      state.filterMonth = ym;
       const empId = state.filterEmployee;
-      const qs = empId ? `?month=${month}&employee_id=${empId}` : `?month=${month}`;
+      const qs = empId ? `?month=${ym}&employee_id=${empId}` : `?month=${ym}`;
       entries = await api('GET', `/entries${qs}`);
       container.innerHTML = renderEntriesTable(entries, true, true);
     }
@@ -714,21 +846,18 @@ function attachListeners() {
     form.addEventListener('submit', handleUpdateEmployee);
   });
 
-  // Filter buttons
-  const myMonthInput = document.getElementById('my-month');
-  if (myMonthInput) {
-    myMonthInput.addEventListener('change', () => {
-      state.filterMonth = myMonthInput.value;
-      loadAndRenderEntries();
-    });
+  // Edit entry form submission
+  const editEntryForm = document.getElementById('edit-entry-form');
+  if (editEntryForm) {
+    editEntryForm.addEventListener('submit', handleUpdateEntry);
   }
 
-  // Excel import file picker
+  // Excel import file picker (multi-file)
   const importFileInput = document.getElementById('import-excel-file');
   if (importFileInput) {
     importFileInput.addEventListener('change', (e) => {
-      const file = e.target.files[0];
-      if (file) handleExcelImport(file);
+      const files = Array.from(e.target.files);
+      if (files.length > 0) handleExcelImportMulti(files);
       e.target.value = '';
     });
   }
@@ -795,15 +924,32 @@ async function handleAction(e) {
     case 'delete-entry':
       await handleDeleteEntry(e.currentTarget.dataset.id);
       break;
-    case 'load-my-entries':
-    case 'load-all-entries': {
-      const monthEl = document.getElementById('filter-month') || document.getElementById('my-month');
-      const empEl = document.getElementById('filter-emp');
-      if (monthEl) state.filterMonth = monthEl.value;
-      if (empEl) state.filterEmployee = empEl.value;
+    case 'edit-entry': {
+      const id = parseInt(e.currentTarget.dataset.id);
+      state.editingEntryId = (state.editingEntryId === id) ? null : id;
       loadAndRenderEntries();
       break;
     }
+    case 'cancel-edit-entry':
+      state.editingEntryId = null;
+      loadAndRenderEntries();
+      break;
+    case 'sort-col': {
+      const col = e.currentTarget.dataset.col;
+      if (state.sortCol === col) {
+        state.sortDir = state.sortDir === 'asc' ? 'desc' : 'asc';
+      } else {
+        state.sortCol = col;
+        state.sortDir = 'asc';
+      }
+      loadAndRenderEntries();
+      break;
+    }
+    case 'load-my-entries':
+    case 'load-all-entries':
+      state.editingEntryId = null;
+      loadAndRenderEntries();
+      break;
     case 'export-pdf':
       handleExportPDF();
       break;
@@ -1018,11 +1164,83 @@ async function handleSaveSettings(e) {
 }
 
 function handleExportPDF() {
-  const month = document.getElementById('exp-month')?.value;
+  const year  = document.getElementById('exp-year')?.value;
+  const month = document.getElementById('exp-month-sel')?.value;
   const empId = document.getElementById('exp-employee')?.value;
-  if (!month) { alert('Bitte Monat wählen.'); return; }
-  const qs = empId ? `?month=${month}&employee_id=${empId}` : `?month=${month}`;
+  const noSig = document.getElementById('exp-no-sig')?.checked;
+  if (!year || !month) { alert('Bitte Jahr und Monat wählen.'); return; }
+  const ym = `${year}-${month}`;
+  let qs = `?month=${ym}`;
+  if (empId) qs += `&employee_id=${empId}`;
+  if (noSig) qs += `&no_sig=1`;
   window.open(`/api/export/pdf${qs}`, '_blank');
+}
+
+async function handleUpdateEntry(e) {
+  e.preventDefault();
+  const form = e.target;
+  const id = form.dataset.id;
+  const fd = new FormData(form);
+  const body = {
+    date:        fd.get('date'),
+    category:    fd.get('category'),
+    start_time:  fd.get('start_time') || null,
+    end_time:    fd.get('end_time')   || null,
+    tip:         parseFloat(fd.get('tip')) || 0,
+    description: fd.get('description') || '',
+  };
+  try {
+    await api('PUT', `/entries/${id}`, body);
+    state.editingEntryId = null;
+    showToast('✅ Eintrag gespeichert');
+    loadAndRenderEntries();
+  } catch (err) {
+    alert('Fehler: ' + err.message);
+  }
+}
+
+// ==================== MULTI-FILE IMPORT ====================
+async function handleExcelImportMulti(files) {
+  const statusEl = document.getElementById('import-multi-status');
+  if (!statusEl) return;
+
+  for (const file of files) {
+    const rowId = `imp-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const row = document.createElement('div');
+    row.id = rowId;
+    row.className = 'flex items-center gap-3 py-2 border-b border-gray-100 text-sm';
+    row.innerHTML = `<span class="text-gray-400">⏳</span><span class="flex-1 text-gray-700 truncate">${file.name}</span><span class="text-xs text-gray-400">Warte...</span>`;
+    statusEl.appendChild(row);
+
+    const setStatus = (icon, msg, cls) => {
+      row.innerHTML = `<span>${icon}</span><span class="flex-1 text-gray-700 truncate">${file.name}</span><span class="text-xs ${cls}">${msg}</span>`;
+    };
+
+    setStatus('🔄', 'Lese...', 'text-blue-500');
+    try {
+      const meta = extractMetaFromFilename(file.name);
+      const records = await parseExcelFile(file, meta.year);
+
+      // Try to match employee by name
+      const empMatch = state.employees.find(emp =>
+        !emp.is_boss && emp.name.toLowerCase().includes(meta.employeeName.toLowerCase())
+      );
+      if (!empMatch) {
+        setStatus('⚠️', `Mitarbeiter "${meta.employeeName}" nicht gefunden`, 'text-amber-600');
+        continue;
+      }
+      if (!records.length) {
+        setStatus('⚠️', 'Keine Zeilen gefunden', 'text-amber-600');
+        continue;
+      }
+
+      setStatus('🔄', `${records.length} Zeilen speichern...`, 'text-blue-500');
+      const result = await api('POST', '/import/records', { employee_id: empMatch.id, records });
+      setStatus('✅', `${result.inserted ?? records.length} importiert`, 'text-green-600');
+    } catch (err) {
+      setStatus('❌', err.message, 'text-red-500');
+    }
+  }
 }
 
 // ==================== IMPORT TAB ====================
@@ -1048,16 +1266,18 @@ function renderImport() {
     Dateiname <code>MM-YYYY_Name.xlsx</code> → Monat, Jahr und Mitarbeiter werden automatisch erkannt.
   </p>
 
-  <!-- Step 1: File picker -->
-  <div class="border-2 border-dashed border-gray-300 rounded-xl p-6 text-center hover:bg-gray-50 transition mb-5">
+  <!-- Step 1: File picker (multi-file) -->
+  <div class="border-2 border-dashed border-gray-300 rounded-xl p-6 text-center hover:bg-gray-50 transition mb-4">
     <label for="import-excel-file" class="cursor-pointer">
       <div class="text-3xl mb-2">📁</div>
-      <div class="font-semibold text-gray-700">Datei auswählen</div>
-      <div class="text-xs text-gray-400 mt-1">Format: <code>11-2025_Mustermann.xlsx</code></div>
+      <div class="font-semibold text-gray-700">Dateien auswählen</div>
+      <div class="text-xs text-gray-400 mt-1">Mehrere Dateien gleichzeitig möglich · Format: <code>MM-YYYY_Name.xlsx</code></div>
     </label>
-    <input type="file" id="import-excel-file" accept=".xlsx,.xls" class="hidden">
-    ${importState.fileName ? `<div class="mt-3 text-sm text-blue-700 font-medium">📄 ${importState.fileName}</div>` : ''}
+    <input type="file" id="import-excel-file" accept=".xlsx,.xls" multiple class="hidden">
   </div>
+
+  <!-- Multi-file import status list -->
+  <div id="import-multi-status" class="mb-5 divide-y divide-gray-100 rounded-xl border border-gray-200 overflow-hidden empty:hidden"></div>
 
   <!-- Step 2: Metadata (shown after file load) -->
   ${hasRecords ? `

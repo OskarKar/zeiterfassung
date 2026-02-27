@@ -202,15 +202,16 @@ router.get('/pdf', (req, res) => {
     y += ROW_H;
   }
 
-  // ── SIGNATURE LINES ──
-  y += 30;
-  if (y > 760) { doc.addPage({ margin: 0, size: 'A4' }); y = MT + 30; }
-
-  doc.moveTo(ML, y).lineTo(ML + 160, y).lineWidth(0.7).stroke('#555');
-  doc.moveTo(ML + 240, y).lineTo(ML + 240 + 160, y).lineWidth(0.7).stroke('#555');
-  doc.fillColor('#444').fontSize(8).font('Helvetica');
-  doc.text('Datum, Unterschrift Mitarbeiter', ML, y + 4, { width: 160 });
-  doc.text('Datum, Unterschrift Arbeitgeber', ML + 240, y + 4, { width: 160 });
+  // ── SIGNATURE LINES (optional) ──
+  if (!req.query.no_sig) {
+    y += 30;
+    if (y > 760) { doc.addPage({ margin: 0, size: 'A4' }); y = MT + 30; }
+    doc.moveTo(ML, y).lineTo(ML + 160, y).lineWidth(0.7).stroke('#555');
+    doc.moveTo(ML + 240, y).lineTo(ML + 240 + 160, y).lineWidth(0.7).stroke('#555');
+    doc.fillColor('#444').fontSize(8).font('Helvetica');
+    doc.text('Datum, Unterschrift Mitarbeiter', ML, y + 4, { width: 160 });
+    doc.text('Datum, Unterschrift Arbeitgeber', ML + 240, y + 4, { width: 160 });
+  }
 
   doc.end();
 });
