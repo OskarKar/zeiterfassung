@@ -1449,8 +1449,8 @@ async function handleExcelImportMulti(files) {
       const meta = extractMetaFromFilename(file.name);
       const { records, nameFromHeader } = await parseExcelFile(file, meta.year);
 
-      // Prefer name from Excel header, fallback to filename
-      const nameToMatch = (nameFromHeader || meta.employeeName || '').toLowerCase().trim();
+      // Prefer filename name (always reliable), use header name only if filename has no name part
+      const nameToMatch = (meta.employeeName || nameFromHeader || '').toLowerCase().trim();
 
       if (!nameToMatch) {
         setStatus('⚠️', 'Name nicht erkannt (Kopfzeile + Dateiname leer)', 'text-amber-600');
