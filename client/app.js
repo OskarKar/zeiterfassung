@@ -1296,38 +1296,68 @@ function extractMetaFromFilename(filename) {
   return { month, year, employeeName };
 }
 
-// Extract name from header row (row 0): right-most non-empty cell
-// Extract period from header row: left-most non-empty cell → parse month+year
-function extractMetaFromHeader(row0) {
-  if (!row0 || !row0.length) return { nameFromHeader: '', yearFromHeader: '', monthFromHeader: '' };
+// Known Excel column header words to ignore when searching for the employee name
+const COL_HEADER_WORDS = ['tag', 'datum', 'tour', 'abfahrt', 'ankunft', 'stunden', 'taggeld', 'wochentag', 'beschreibung', 'tätigkeit', 'bezeichnung'];
 
-  // Find leftmost and rightmost non-empty cells
-  let left = '', right = '';
-  for (let i = 0; i < row0.length; i++) {
-    const v = String(row0[i] || '').trim();
-    if (v) { if (!left) left = v; right = v; }
+// Scan first rows of jsonData to find: employee name, year, month, and data start row
+function extractMetaFromRows(jsonData) {
+  let nameFromHeader = '', yearFromHeader = '', monthFromHeader = '';
+  let dataStartRow = 2; // default
+
+  for (let ri = 0; ri < Math.min(6, jsonData.length); ri++) {
+    const row = jsonData[ri];
+    if (!row) continue;
+    const cells = row.map(c => String(c || '').trim()).filter(Boolean);
+    if (!cells.length) continue;
+
+    // Detect column header row: contains known column words
+    const lowerCells = cells.map(c => c.toLowerCase());
+    const isColHeader = lowerCells.some(c => COL_HEADER_WORDS.includes(c));
+    if (isColHeader) {
+      dataStartRow = ri + 2; // data starts 2 rows after column headers (skip taggeld-satz row)
+      break;
+    }
+
+    // Try to extract year from this row
+    const rowText = cells.join(' ');
+    if (!yearFromHeader) {
+      const ym = rowText.match(/\b(20\d{2})\b/);
+      if (ym) yearFromHeader = ym[1];
+    }
+
+    // Try to extract month name from this row
+    if (!monthFromHeader) {
+      const lower = rowText.toLowerCase();
+      for (const [key, val] of Object.entries(DE_MONTHS)) {
+        if (lower.includes(key)) { monthFromHeader = val; break; }
+      }
+      if (!monthFromHeader) {
+        const nm = rowText.match(/\b(0?[1-9]|1[0-2])\/(20\d{2})\b/);
+        if (nm) { monthFromHeader = nm[1].padStart(2, '0'); yearFromHeader = yearFromHeader || nm[2]; }
+      }
+    }
+
+    // Try to find employee name: a cell that is NOT a date/number/month and looks like a name
+    // Typically the rightmost or a standalone cell that isn't the period string
+    for (let ci = cells.length - 1; ci >= 0; ci--) {
+      const c = cells[ci];
+      const lower = c.toLowerCase();
+      // Skip if it's a known column header word, a year, or a month name alone
+      if (COL_HEADER_WORDS.includes(lower)) continue;
+      if (/^\d+$/.test(c)) continue;
+      if (/^\d{2}[.\/\-]\d{4}$/.test(c)) continue; // "01/2025"
+      if (Object.keys(DE_MONTHS).includes(lower)) continue; // standalone month name
+      // Skip if it already contains a year (likely the period string, not name)
+      if (/\b20\d{2}\b/.test(c) && cells.length === 1) continue;
+      // Looks like a name candidate
+      if (c.length >= 2 && /[a-zA-ZäöüÄÖÜß]/.test(c)) {
+        nameFromHeader = c;
+        break;
+      }
+    }
   }
 
-  // Parse name from right cell (may be just the surname)
-  const nameFromHeader = right !== left ? right : '';
-
-  // Parse year from left cell e.g. "Jänner 2025" or "01/2025" or "2025-01"
-  let yearFromHeader = '', monthFromHeader = '';
-  const yearMatch = left.match(/\b(20\d{2})\b/);
-  if (yearMatch) yearFromHeader = yearMatch[1];
-
-  // Try to extract month name
-  const lowerLeft = left.toLowerCase();
-  for (const [key, val] of Object.entries(DE_MONTHS)) {
-    if (lowerLeft.includes(key)) { monthFromHeader = val; break; }
-  }
-  // Fallback: numeric month like "01/2025" or "2025-01"
-  if (!monthFromHeader) {
-    const numM = left.match(/\b(0?[1-9]|1[0-2])\b/);
-    if (numM) monthFromHeader = numM[1].padStart(2, '0');
-  }
-
-  return { nameFromHeader, yearFromHeader, monthFromHeader };
+  return { nameFromHeader, yearFromHeader, monthFromHeader, dataStartRow };
 }
 
 // Returns Promise<{ records, nameFromHeader, yearFromHeader, monthFromHeader }>
@@ -1344,13 +1374,12 @@ function parseExcelFile(file, fallbackYear) {
         const ws = workbook.Sheets[workbook.SheetNames[0]];
         const jsonData = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: '' });
 
-        // Extract meta from header row 0
-        const { nameFromHeader, yearFromHeader, monthFromHeader } = extractMetaFromHeader(jsonData[0] || []);
+        // Scan top rows to find name, period, and where data starts
+        const { nameFromHeader, yearFromHeader, monthFromHeader, dataStartRow } = extractMetaFromRows(jsonData);
         const year = yearFromHeader || fallbackYear;
 
         const records = [];
-        // Row 0 = header, Row 1 = taggeld-satz info, data starts at Row 2
-        for (let i = 2; i < jsonData.length; i++) {
+        for (let i = dataStartRow; i < jsonData.length; i++) {
           const row = jsonData[i];
           if (!row || row.length === 0) continue;
 
