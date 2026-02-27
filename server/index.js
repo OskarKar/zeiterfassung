@@ -181,12 +181,15 @@ app.get('/api/version', (req, res) => {
 // ==================== UPDATE LOG ROUTE ====================
 app.get('/api/update-log', (req, res) => {
   const fs = require('fs');
-  const logPath = path.join(__dirname, '..', 'data', 'update.log');
-  if (!fs.existsSync(logPath)) {
-    return res.json({ log: 'Noch kein Update-Log vorhanden.\nFühre das Update-Skript aus, um ein Log zu erstellen.' });
+  const updateLog = path.join(__dirname, '..', 'data', 'update.log');
+  const initLog   = path.join(__dirname, '..', '..', 'init.log');
+  let parts = [];
+  if (fs.existsSync(initLog))   parts.push('=== init.log ===\n' + fs.readFileSync(initLog, 'utf8'));
+  if (fs.existsSync(updateLog)) parts.push('=== update.log ===\n' + fs.readFileSync(updateLog, 'utf8'));
+  if (!parts.length) {
+    return res.json({ log: 'Noch kein Log vorhanden.\nInit- oder Update-Skript ausführen.' });
   }
-  const content = fs.readFileSync(logPath, 'utf8');
-  // Return last 8 KB to avoid sending huge files
+  const content = parts.join('\n\n');
   const trimmed = content.length > 8192 ? '...(gekürzt)\n' + content.slice(-8192) : content;
   res.json({ log: trimmed });
 });
