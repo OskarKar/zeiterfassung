@@ -61,4 +61,4 @@ VERSION=$(grep '"version"' "$DIR/server/package.json" | head -1 | sed 's/.*"\([0
 log ""
 log "SUCCESS Update abgeschlossen: $(date '+%Y-%m-%d %H:%M:%S')"
 log "Version: v${VERSION}"
-log "Datenbank (./data) wurde nicht veraendert."
+log "Datenbank ./data wurde nicht veraendert."
