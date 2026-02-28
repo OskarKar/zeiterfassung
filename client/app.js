@@ -14,6 +14,12 @@ const state = {
   typingTimeout: null,
   editingEntryId: null,
   appVersion: '',
+  // New ticket system state
+  customers: [],
+  tours: [],
+  tickets: [],
+  calendarEvents: [],
+  ticketFilter: { status: '', employee_id: '', date: '' },
 };
 
 const socket = io();
@@ -76,6 +82,18 @@ function render() {
     if (state.activeTab === 'alle' || state.activeTab === 'uebersicht') {
       loadAndRenderEntries();
     }
+    // Load data for new ticket system tabs
+    if (state.isBoss) {
+      if (state.activeTab === 'touren') loadTours();
+      if (state.activeTab === 'kunden') loadCustomers();
+      if (state.activeTab === 'tickets') loadTickets();
+    } else {
+      // Employee tabs
+      if (state.activeTab === 'tour_tickets') {
+        loadMyTours();
+        loadMyTickets();
+      }
+    }
   }
   attachListeners();
 }
@@ -129,14 +147,20 @@ function renderMain() {
   const tabs = [
     { id: 'erfassung', label: '➕ Erfassung', always: true },
     { id: 'uebersicht', label: '📋 Meine Einträge', always: true },
+    // Employee ticket tab (conditional)
+    { id: 'tour_tickets', label: '🗺️ Tour & Tickets', employee: true },
     { id: 'alle', label: '📊 Alle Einträge', boss: true },
     { id: 'mitarbeiter', label: '👥 Mitarbeiter', boss: true },
     { id: 'import', label: '📂 Daten importieren', boss: true },
     { id: 'export', label: '📥 Export', boss: true },
     { id: 'statistik', label: '📈 Statistik & Analyse', boss: true },
     { id: 'auditlog', label: '📝 Änderungsprotokoll', boss: true },
+    // New ticket system tabs (Boss only)
+    { id: 'touren', label: '🗺️ Touren', boss: true },
+    { id: 'kunden', label: '👥 Kunden', boss: true },
+    { id: 'tickets', label: '🎫 Tickets', boss: true },
     { id: 'einstellungen', label: '⚙️ Einstellungen', boss: true },
-  ].filter(t => t.always || (t.boss && state.isBoss));
+  ].filter(t => t.always || (t.boss && state.isBoss) || (t.employee && !state.isBoss && state.settings.tickets_enabled === 'true'));
 
   return `
   <div class="min-h-screen bg-gray-100">
@@ -188,12 +212,16 @@ function renderMain() {
       <div class="bg-white rounded-2xl shadow-sm p-6">
         ${state.activeTab === 'erfassung' ? renderErfassung() : ''}
         ${state.activeTab === 'uebersicht' ? renderUebersicht() : ''}
+        ${state.activeTab === 'tour_tickets' && !state.isBoss ? renderTourTickets() : ''}
         ${state.activeTab === 'alle' && state.isBoss ? renderAlle() : ''}
         ${state.activeTab === 'mitarbeiter' && state.isBoss ? renderMitarbeiter() : ''}
         ${state.activeTab === 'import' && state.isBoss ? renderImport() : ''}
         ${state.activeTab === 'export' && state.isBoss ? renderExport() : ''}
         ${state.activeTab === 'statistik' && state.isBoss ? renderStatistik() : ''}
         ${state.activeTab === 'auditlog'  && state.isBoss ? renderAuditLog() : ''}
+        ${state.activeTab === 'touren' && state.isBoss ? renderTouren() : ''}
+        ${state.activeTab === 'kunden' && state.isBoss ? renderKunden() : ''}
+        ${state.activeTab === 'tickets' && state.isBoss ? renderTickets() : ''}
         ${state.activeTab === 'einstellungen' && state.isBoss ? renderEinstellungen() : ''}
       </div>
     </div>
@@ -602,27 +630,51 @@ function renderEinstellungen() {
   return `
   <h2 class="text-xl font-bold text-gray-800 mb-6">⚙️ Einstellungen</h2>
 
-  <form id="settings-form" class="space-y-4 max-w-lg">
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-      <div>
-        <label class="block text-sm font-semibold text-gray-600 mb-1">Admin-PIN</label>
-        <input type="password" name="boss_pin" value="${s.boss_pin || ''}"
-          class="w-full border-2 border-gray-200 rounded-xl px-4 py-2.5 focus:outline-none focus:border-blue-500" />
+  <form id="settings-form" class="space-y-6 max-w-2xl">
+    <div>
+      <h3 class="font-semibold text-gray-700 mb-4 border-b pb-2">🔐 Systemeinstellungen</h3>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-semibold text-gray-600 mb-1">Admin-PIN</label>
+          <input type="password" name="boss_pin" value="${s.boss_pin || ''}"
+            class="w-full border-2 border-gray-200 rounded-xl px-4 py-2.5 focus:outline-none focus:border-blue-500" />
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-gray-600 mb-1">Taggeld-Satz (€/Std.)</label>
+          <input type="number" name="taggeld_satz" value="${s.taggeld_satz || 1.27}" step="0.01" min="0"
+            class="w-full border-2 border-gray-200 rounded-xl px-4 py-2.5 focus:outline-none focus:border-blue-500" />
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-gray-600 mb-1">Pausengrenze (Stunden)</label>
+          <input type="number" name="break_threshold_hours" value="${s.break_threshold_hours || 6}" step="0.5" min="0"
+            class="w-full border-2 border-gray-200 rounded-xl px-4 py-2.5 focus:outline-none focus:border-blue-500" />
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-gray-600 mb-1">Pausendauer (Minuten)</label>
+          <input type="number" name="break_duration_minutes" value="${s.break_duration_minutes || 30}" min="0"
+            class="w-full border-2 border-gray-200 rounded-xl px-4 py-2.5 focus:outline-none focus:border-blue-500" />
+        </div>
       </div>
-      <div>
-        <label class="block text-sm font-semibold text-gray-600 mb-1">Taggeld-Satz (€/Std.)</label>
-        <input type="number" name="taggeld_satz" value="${s.taggeld_satz || 1.27}" step="0.01" min="0"
-          class="w-full border-2 border-gray-200 rounded-xl px-4 py-2.5 focus:outline-none focus:border-blue-500" />
-      </div>
-      <div>
-        <label class="block text-sm font-semibold text-gray-600 mb-1">Pausengrenze (Stunden)</label>
-        <input type="number" name="break_threshold_hours" value="${s.break_threshold_hours || 6}" step="0.5" min="0"
-          class="w-full border-2 border-gray-200 rounded-xl px-4 py-2.5 focus:outline-none focus:border-blue-500" />
-      </div>
-      <div>
-        <label class="block text-sm font-semibold text-gray-600 mb-1">Pausendauer (Minuten)</label>
-        <input type="number" name="break_duration_minutes" value="${s.break_duration_minutes || 30}" min="0"
-          class="w-full border-2 border-gray-200 rounded-xl px-4 py-2.5 focus:outline-none focus:border-blue-500" />
+    </div>
+
+    <div>
+      <h3 class="font-semibold text-gray-700 mb-4 border-b pb-2">🎫 Ticket-System</h3>
+      <div class="space-y-4">
+        <div>
+          <label class="block text-sm font-semibold text-gray-600 mb-1">Google Kalender iCal-URL</label>
+          <input type="url" name="calendar_ical_url" value="${s.calendar_ical_url || ''}" placeholder="https://calendar.google.com/calendar/ical/.../basic.ics"
+            class="w-full border-2 border-gray-200 rounded-xl px-4 py-2.5 focus:outline-none focus:border-blue-500" />
+          <div class="text-xs text-gray-400 mt-1">Öffentlichen Google Kalender für Tour-Planung. Mitarbeiter sehen die Events des Tages.</div>
+        </div>
+        <div class="flex items-center gap-3">
+          <input type="checkbox" name="tickets_enabled" id="tickets-enabled" ${s.tickets_enabled === 'true' ? 'checked' : ''} class="w-5 h-5 accent-blue-600">
+          <label for="tickets-enabled" class="text-sm font-medium text-gray-700">
+            Tour & Tickets für Mitarbeiter aktivieren
+          </label>
+        </div>
+        <div class="text-xs text-gray-500">
+          Wenn aktiviert, sehen Mitarbeiter einen zusätzlichen Tab "Tour & Tickets" zum Erstellen von Tickets für Kalender-Events und Touren.
+        </div>
       </div>
     </div>
 
@@ -887,6 +939,42 @@ function attachListeners() {
       e.target.value = '';
     });
   }
+
+  // New ticket system forms
+  const newTourForm = document.getElementById('new-tour-form');
+  if (newTourForm) {
+    newTourForm.addEventListener('submit', handleAddTour);
+  }
+
+  const newCustomerForm = document.getElementById('new-customer-form');
+  if (newCustomerForm) {
+    newCustomerForm.addEventListener('submit', handleAddCustomer);
+  }
+
+  const customersCSVFile = document.getElementById('customers-csv-file');
+  if (customersCSVFile) {
+    customersCSVFile.addEventListener('change', handleCustomersCSVImport);
+  }
+
+  // Tour & Tickets modal and form
+  const ticketModalClose = document.getElementById('ticket-modal-close');
+  if (ticketModalClose) {
+    ticketModalClose.addEventListener('click', () => {
+      document.getElementById('ticket-modal')?.classList.add('hidden');
+    });
+  }
+
+  const ticketModalCancel = document.getElementById('ticket-modal-cancel');
+  if (ticketModalCancel) {
+    ticketModalCancel.addEventListener('click', () => {
+      document.getElementById('ticket-modal')?.classList.add('hidden');
+    });
+  }
+
+  const ticketForm = document.getElementById('ticket-form');
+  if (ticketForm) {
+    ticketForm.addEventListener('submit', handleSaveTicket);
+  }
 }
 
 function handleTyping() {
@@ -993,6 +1081,38 @@ async function handleAction(e) {
       break;
     case 'run-stats-tasks':
       await handleStatsTasks();
+      break;
+    // New ticket system actions
+    case 'add-tour':
+      await handleAddTour();
+      break;
+    case 'delete-tour':
+      await handleDeleteTour(e.currentTarget.dataset.id);
+      break;
+    case 'add-customer':
+      await handleAddCustomer();
+      break;
+    case 'delete-customer':
+      await handleDeleteCustomer(e.currentTarget.dataset.id);
+      break;
+    case 'close-ticket':
+      await handleCloseTicket(e.currentTarget.dataset.id);
+      break;
+    case 'delete-ticket':
+      await handleDeleteTicket(e.currentTarget.dataset.id);
+      break;
+    case 'load-tickets':
+      await loadTickets();
+      break;
+    // New employee Tour & Tickets actions
+    case 'load-tour-events':
+      await loadCalendarEvents();
+      break;
+    case 'create-ticket-from-event':
+      await handleCreateTicketFromEvent(e);
+      break;
+    case 'create-ticket-from-tour':
+      await handleCreateTicketFromTour(e);
       break;
   }
 }
@@ -1183,6 +1303,8 @@ async function handleSaveSettings(e) {
   e.preventDefault();
   const fd = new FormData(e.target);
   const body = Object.fromEntries(fd.entries());
+  // Handle checkbox properly
+  body.tickets_enabled = fd.get('tickets_enabled') ? 'true' : 'false';
   try {
     await api('POST', '/settings', body);
     state.settings = await api('GET', '/settings');
@@ -1852,6 +1974,766 @@ function showToast(msg) {
   t.textContent = msg;
   document.body.appendChild(t);
   setTimeout(() => t.remove(), 3000);
+}
+
+// ==================== TOUREN TAB ====================
+function renderTouren() {
+  return `
+  <h2 class="text-xl font-bold text-gray-800 mb-6">🗺️ Touren verwalten</h2>
+
+  <!-- Neue Tour anlegen -->
+  <div class="border border-gray-200 rounded-xl p-5 mb-6">
+    <h3 class="font-semibold text-gray-700 mb-4">➕ Neue Tour anlegen</h3>
+    <form id="new-tour-form" class="grid grid-cols-1 md:grid-cols-2 gap-4" novalidate>
+      <div>
+        <label class="block text-xs font-semibold text-gray-500 mb-1">Tour-Name *</label>
+        <input type="text" name="name" placeholder="z.B. Tour A - Innenstadt"
+          class="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-blue-500" />
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-gray-500 mb-1">Turnus</label>
+        <select name="turnus" class="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-blue-500">
+          <option value="taeglich">Täglich</option>
+          <option value="woechentlich">Wöchentlich</option>
+          <option value="monatlich">Monatlich</option>
+          <option value="jaehrlich">Jährlich</option>
+        </select>
+      </div>
+      <div class="md:col-span-2">
+        <label class="block text-xs font-semibold text-gray-500 mb-1">Beschreibung</label>
+        <textarea name="beschreibung" rows="2" placeholder="Beschreibung der Tour..."
+          class="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-blue-500"></textarea>
+      </div>
+      <div class="md:col-span-2">
+        <label class="block text-xs font-semibold text-gray-500 mb-1">Zugewiesene Mitarbeiter</label>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
+          ${state.employees.filter(e => !e.is_boss).map(emp => `
+            <label class="flex items-center gap-2 text-sm">
+              <input type="checkbox" name="mitarbeiter_ids" value="${emp.id}" class="accent-blue-600">
+              ${emp.name}
+            </label>
+          `).join('')}
+        </div>
+      </div>
+      <div class="flex items-end">
+        <button type="submit"
+          class="bg-green-600 hover:bg-green-700 text-white font-semibold py-2.5 px-4 rounded-xl transition text-sm">
+          ➕ Tour anlegen
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Tourenliste -->
+  <div id="tours-list-container">
+    <div class="text-center py-8 text-gray-400">Lade Touren...</div>
+  </div>`;
+}
+
+// ==================== KUNDEN TAB ====================
+function renderKunden() {
+  return `
+  <h2 class="text-xl font-bold text-gray-800 mb-6">👥 Kunden verwalten</h2>
+
+  <!-- CSV Import -->
+  <div class="border border-gray-200 rounded-xl p-5 mb-6">
+    <h3 class="font-semibold text-gray-700 mb-4">📂 Kunden importieren (CSV)</h3>
+    <div class="border-2 border-dashed border-gray-300 rounded-xl p-6 text-center hover:bg-gray-50 transition">
+      <label for="customers-csv-file" class="cursor-pointer">
+        <div class="text-3xl mb-2">📁</div>
+        <div class="font-semibold text-gray-700">CSV-Datei auswählen</div>
+        <div class="text-xs text-gray-400 mt-1">Format: Kunden_Vorlage.csv (KUNDENNUMMER, NAME1, NAME2, NAME3, STRASSE, HNR, PLZ, ORT, TEL1, EMAIL, INFO)</div>
+      </label>
+      <input type="file" id="customers-csv-file" accept=".csv,.xlsx,.xls" class="hidden">
+    </div>
+    <div id="customers-import-status" class="mt-4"></div>
+  </div>
+
+  <!-- Neuer Kunde anlegen -->
+  <div class="border border-gray-200 rounded-xl p-5 mb-6">
+    <h3 class="font-semibold text-gray-700 mb-4">➕ Neuen Kunden anlegen</h3>
+    <form id="new-customer-form" class="grid grid-cols-1 md:grid-cols-2 gap-4" novalidate>
+      <div>
+        <label class="block text-xs font-semibold text-gray-500 mb-1">Kundennummer</label>
+        <input type="text" name="kundennummer" placeholder="z.B. 00001038"
+          class="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-blue-500" />
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-gray-500 mb-1">Firmenname *</label>
+        <input type="text" name="name" placeholder="z.B. Fa. Mustermann GmbH"
+          class="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-blue-500" />
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-gray-500 mb-1">Vorname</label>
+        <input type="text" name="vorname" placeholder="Max"
+          class="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-blue-500" />
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-gray-500 mb-1">Nachname</label>
+        <input type="text" name="nachname" placeholder="Mustermann"
+          class="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-blue-500" />
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-gray-500 mb-1">Straße</label>
+        <input type="text" name="strasse" placeholder="Hauptstraße"
+          class="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-blue-500" />
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-gray-500 mb-1">Hausnummer</label>
+        <input type="text" name="hr" placeholder="123"
+          class="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-blue-500" />
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-gray-500 mb-1">PLZ</label>
+        <input type="text" name="plz" placeholder="12345"
+          class="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-blue-500" />
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-gray-500 mb-1">Ort</label>
+        <input type="text" name="ort" placeholder="Berlin"
+          class="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-blue-500" />
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-gray-500 mb-1">Telefon</label>
+        <input type="text" name="telefon" placeholder="0123 456789"
+          class="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-blue-500" />
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-gray-500 mb-1">E-Mail</label>
+        <input type="email" name="email" placeholder="kunde@beispiel.de"
+          class="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-blue-500" />
+      </div>
+      <div class="md:col-span-2">
+        <label class="block text-xs font-semibold text-gray-500 mb-1">Bemerkung</label>
+        <textarea name="bemerkung" rows="2" placeholder="Interne Notizen..."
+          class="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-blue-500"></textarea>
+      </div>
+      <div class="flex items-end">
+        <button type="submit"
+          class="bg-green-600 hover:bg-green-700 text-white font-semibold py-2.5 px-4 rounded-xl transition text-sm">
+          ➕ Kunde anlegen
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Kundenliste -->
+  <div id="customers-list-container">
+    <div class="text-center py-8 text-gray-400">Lade Kunden...</div>
+  </div>`;
+}
+
+// ==================== TICKETS TAB ====================
+function renderTickets() {
+  const ticketTypes = [
+    { value: 'dichtheit', label: 'Dichtheitsprüfung' },
+    { value: 'terminwunsch', label: 'Terminwunsch' },
+    { value: 'zusatzarbeit', label: 'Zusatzarbeit' },
+    { value: 'mangel', label: 'Mangel/Beanstandung' },
+    { value: 'sonstiges', label: 'Sonstiges' }
+  ];
+
+  return `
+  <h2 class="text-xl font-bold text-gray-800 mb-6">🎫 Tickets verwalten</h2>
+
+  <!-- Filter -->
+  <div class="flex gap-3 mb-6 flex-wrap items-end">
+    <div>
+      <label class="block text-xs font-semibold text-gray-500 mb-1">Status</label>
+      <select id="ticket-filter-status" class="border-2 border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-blue-500">
+        <option value="">Alle</option>
+        <option value="offen">Offen</option>
+        <option value="erledigt">Erledigt</option>
+      </select>
+    </div>
+    <div>
+      <label class="block text-xs font-semibold text-gray-500 mb-1">Mitarbeiter</label>
+      <select id="ticket-filter-employee" class="border-2 border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-blue-500">
+        <option value="">Alle</option>
+        ${state.employees.filter(e => !e.is_boss).map(emp =>
+          `<option value="${emp.id}">${emp.name}</option>`
+        ).join('')}
+      </select>
+    </div>
+    <button data-action="load-tickets"
+      class="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-blue-700 transition">
+      Filtern
+    </button>
+  </div>
+
+  <!-- Ticketsliste -->
+  <div id="tickets-list-container">
+    <div class="text-center py-8 text-gray-400">Lade Tickets...</div>
+  </div>`;
+}
+
+// ==================== DATA LOADERS FOR TICKET SYSTEM ====================
+async function loadTours() {
+  const container = document.getElementById('tours-list-container');
+  if (!container) return;
+
+  try {
+    const tours = await api('GET', '/tours');
+    state.tours = tours;
+    
+    if (tours.length === 0) {
+      container.innerHTML = '<div class="text-center py-8 text-gray-400">Noch keine Touren angelegt.</div>';
+      return;
+    }
+
+    let html = '<div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="border-b-2 border-gray-100 text-gray-500 font-semibold text-xs uppercase"><th class="text-left py-3 px-2">Tour</th><th class="text-left py-3 px-2">Turnus</th><th class="text-left py-3 px-2">Mitarbeiter</th><th class="text-left py-3 px-2">Beschreibung</th><th class="py-3 px-2 w-20"></th></tr></thead><tbody>';
+
+    tours.forEach(tour => {
+      const employeeNames = tour.mitarbeiter_ids.length > 0 
+        ? tour.mitarbeiter_ids.map(id => {
+            const emp = state.employees.find(e => e.id === id);
+            return emp ? emp.name : '';
+          }).filter(Boolean).join(', ')
+        : '—';
+
+      html += `
+        <tr class="border-b border-gray-50 hover:bg-gray-50">
+          <td class="py-3 px-2 font-medium">${tour.name}</td>
+          <td class="py-3 px-2">${tour.turnus}</td>
+          <td class="py-3 px-2 text-gray-600">${employeeNames}</td>
+          <td class="py-3 px-2 text-gray-500">${tour.beschreibung || '—'}</td>
+          <td class="py-3 px-2 text-right">
+            <button data-action="edit-tour" data-id="${tour.id}" class="text-blue-600 hover:text-blue-800 text-xs px-2 py-1 rounded hover:bg-blue-50 transition mr-1">✏️</button>
+            <button data-action="delete-tour" data-id="${tour.id}" class="text-red-500 hover:text-red-700 text-xs px-2 py-1 rounded hover:bg-red-50 transition">🗑️</button>
+          </td>
+        </tr>`;
+    });
+
+    html += '</tbody></table></div>';
+    container.innerHTML = html;
+    attachListeners();
+  } catch (e) {
+    container.innerHTML = `<div class="text-red-500 text-sm">Fehler: ${e.message}</div>`;
+  }
+}
+
+async function loadCustomers() {
+  const container = document.getElementById('customers-list-container');
+  if (!container) return;
+
+  try {
+    const customers = await api('GET', '/customers');
+    state.customers = customers;
+    
+    if (customers.length === 0) {
+      container.innerHTML = '<div class="text-center py-8 text-gray-400">Noch keine Kunden angelegt.</div>';
+      return;
+    }
+
+    let html = '<div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="border-b-2 border-gray-100 text-gray-500 font-semibold text-xs uppercase"><th class="text-left py-3 px-2">Kunde</th><th class="text-left py-3 px-2">Adresse</th><th class="text-left py-3 px-2">Kontakt</th><th class="text-left py-3 px-2">Kundennummer</th><th class="py-3 px-2 w-20"></th></tr></thead><tbody>';
+
+    customers.forEach(customer => {
+      const fullName = [customer.name, customer.vorname, customer.nachname].filter(Boolean).join(' ');
+      const address = [customer.strasse, customer.hnr].filter(Boolean).join(' ') + ', ' + [customer.plz, customer.ort].filter(Boolean).join(' ');
+      const contact = [customer.telefon, customer.email].filter(Boolean).join(' | ');
+
+      html += `
+        <tr class="border-b border-gray-50 hover:bg-gray-50">
+          <td class="py-3 px-2">
+            <div class="font-medium">${fullName}</div>
+          </td>
+          <td class="py-3 px-2 text-gray-600">${address}</td>
+          <td class="py-3 px-2 text-gray-500 text-xs">${contact || '—'}</td>
+          <td class="py-3 px-2 text-gray-500">${customer.kundennummer || '—'}</td>
+          <td class="py-3 px-2 text-right">
+            <button data-action="edit-customer" data-id="${customer.id}" class="text-blue-600 hover:text-blue-800 text-xs px-2 py-1 rounded hover:bg-blue-50 transition mr-1">✏️</button>
+            <button data-action="delete-customer" data-id="${customer.id}" class="text-red-500 hover:text-red-700 text-xs px-2 py-1 rounded hover:bg-red-50 transition">🗑️</button>
+          </td>
+        </tr>`;
+    });
+
+    html += '</tbody></table></div>';
+    container.innerHTML = html;
+    attachListeners();
+  } catch (e) {
+    container.innerHTML = `<div class="text-red-500 text-sm">Fehler: ${e.message}</div>`;
+  }
+}
+
+async function loadTickets() {
+  const container = document.getElementById('tickets-list-container');
+  if (!container) return;
+
+  try {
+    const status = document.getElementById('ticket-filter-status')?.value || '';
+    const employeeId = document.getElementById('ticket-filter-employee')?.value || '';
+    
+    let url = '/tickets';
+    const params = [];
+    if (status) params.push(`status=${status}`);
+    if (employeeId) params.push(`employee_id=${employeeId}`);
+    if (params.length > 0) url += '?' + params.join('&');
+
+    const tickets = await api('GET', url);
+    state.tickets = tickets;
+    
+    if (tickets.length === 0) {
+      container.innerHTML = '<div class="text-center py-8 text-gray-400">Keine Tickets gefunden.</div>';
+      return;
+    }
+
+    const ticketTypeLabels = {
+      dichtheit: 'Dichtheitsprüfung',
+      terminwunsch: 'Terminwunsch',
+      zusatzarbeit: 'Zusatzarbeit',
+      mangel: 'Mangel/Beanstandung',
+      sonstiges: 'Sonstiges'
+    };
+
+    let html = '<div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="border-b-2 border-gray-100 text-gray-500 font-semibold text-xs uppercase"><th class="text-left py-3 px-2">Datum</th><th class="text-left py-3 px-2">Typ</th><th class="text-left py-3 px-2">Kunde/Tour</th><th class="text-left py-3 px-2">Mitarbeiter</th><th class="text-left py-3 px-2">Notiz</th><th class="text-left py-3 px-2">Status</th><th class="py-3 px-2 w-20"></th></tr></thead><tbody>';
+
+    tickets.forEach(ticket => {
+      const customerInfo = ticket.customer_name ? `${ticket.customer_name}, ${ticket.strasse} ${ticket.hnr}, ${ticket.plz} ${ticket.ort}` : (ticket.tour_name || ticket.calendar_event_title || '—');
+      const statusBadge = ticket.status === 'offen' 
+        ? '<span class="px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">Offen</span>'
+        : '<span class="px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">Erledigt</span>';
+
+      html += `
+        <tr class="border-b border-gray-50 hover:bg-gray-50">
+          <td class="py-3 px-2 text-gray-600">${new Date(ticket.created_at).toLocaleDateString('de-DE')}</td>
+          <td class="py-3 px-2">${ticketTypeLabels[ticket.ticket_type] || ticket.ticket_type}</td>
+          <td class="py-3 px-2 text-gray-600">${customerInfo}</td>
+          <td class="py-3 px-2">${ticket.employee_name}</td>
+          <td class="py-3 px-2 text-gray-500 max-w-xs truncate">${ticket.notiz || '—'}</td>
+          <td class="py-3 px-2">${statusBadge}</td>
+          <td class="py-3 px-2 text-right">
+            ${ticket.status === 'offen' ? `
+              <button data-action="close-ticket" data-id="${ticket.id}" class="text-green-600 hover:text-green-800 text-xs px-2 py-1 rounded hover:bg-green-50 transition mr-1">✅</button>
+            ` : ''}
+            <button data-action="edit-ticket" data-id="${ticket.id}" class="text-blue-600 hover:text-blue-800 text-xs px-2 py-1 rounded hover:bg-blue-50 transition mr-1">✏️</button>
+            <button data-action="delete-ticket" data-id="${ticket.id}" class="text-red-500 hover:text-red-700 text-xs px-2 py-1 rounded hover:bg-red-50 transition">🗑️</button>
+          </td>
+        </tr>`;
+    });
+
+    html += '</tbody></table></div>';
+    container.innerHTML = html;
+    attachListeners();
+  } catch (e) {
+    container.innerHTML = `<div class="text-red-500 text-sm">Fehler: ${e.message}</div>`;
+  }
+}
+
+// ==================== EVENT HANDLERS FOR TICKET SYSTEM ====================
+async function handleAddTour(e) {
+  if (e && e.preventDefault) e.preventDefault();
+  const form = e?.target || document.getElementById('new-tour-form');
+  if (!form) return;
+  
+  const fd = new FormData(form);
+  const mitarbeiterIds = Array.from(form.querySelectorAll('input[name="mitarbeiter_ids"]:checked')).map(cb => cb.value);
+  
+  const payload = {
+    name: fd.get('name'),
+    beschreibung: fd.get('beschreibung'),
+    turnus: fd.get('turnus'),
+    mitarbeiter_ids: mitarbeiterIds
+  };
+
+  if (!payload.name) { alert('Tour-Name erforderlich.'); return; }
+
+  try {
+    await api('POST', '/tours', payload);
+    form.reset();
+    showToast('✅ Tour angelegt');
+    loadTours();
+  } catch (err) {
+    alert('Fehler: ' + err.message);
+  }
+}
+
+async function handleAddCustomer(e) {
+  if (e && e.preventDefault) e.preventDefault();
+  const form = e?.target || document.getElementById('new-customer-form');
+  if (!form) return;
+  
+  const fd = new FormData(form);
+  const payload = Object.fromEntries(fd.entries());
+
+  if (!payload.name && !payload.nachname) { alert('Name oder Nachname erforderlich.'); return; }
+
+  try {
+    await api('POST', '/customers', payload);
+    form.reset();
+    showToast('✅ Kunde angelegt');
+    loadCustomers();
+  } catch (err) {
+    alert('Fehler: ' + err.message);
+  }
+}
+
+async function handleCustomersCSVImport(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  const statusEl = document.getElementById('customers-import-status');
+  statusEl.innerHTML = '<span class="text-blue-500">Lade...</span>';
+
+  try {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('skipDuplicates', 'true');
+
+    const response = await fetch('/api/customers/import', {
+      method: 'POST',
+      body: formData
+    });
+
+    const result = await response.json();
+    
+    if (!response.ok) {
+      throw new Error(result.error || 'Import fehlgeschlagen');
+    }
+
+    statusEl.innerHTML = `
+      <div class="bg-green-50 border border-green-200 rounded-lg p-3 text-green-800 text-sm">
+        ✅ Import erfolgreich: ${result.imported} Kunden importiert, ${result.skipped} übersprungen
+        ${result.errors.length > 0 ? `<br><small>Warnungen: ${result.errors.slice(0, 3).join(', ')}</small>` : ''}
+      </div>`;
+    
+    loadCustomers();
+  } catch (err) {
+    statusEl.innerHTML = `<div class="bg-red-50 border border-red-200 rounded-lg p-3 text-red-800 text-sm">❌ Fehler: ${err.message}</div>`;
+  }
+  
+  // Reset file input
+  e.target.value = '';
+}
+
+async function handleDeleteTour(id) {
+  if (!confirm('Tour wirklich löschen?')) return;
+  try {
+    await api('DELETE', `/tours/${id}`);
+    showToast('🗑️ Tour gelöscht');
+    loadTours();
+  } catch (err) {
+    alert('Fehler: ' + err.message);
+  }
+}
+
+async function handleDeleteCustomer(id) {
+  if (!confirm('Kunden wirklich löschen?')) return;
+  try {
+    await api('DELETE', `/customers/${id}`);
+    showToast('🗑️ Kunde gelöscht');
+    loadCustomers();
+  } catch (err) {
+    alert('Fehler: ' + err.message);
+  }
+}
+
+async function handleCloseTicket(id) {
+  const befund = prompt('Befund eingeben (optional):');
+  try {
+    await api('PUT', `/tickets/${id}`, {
+      status: 'erledigt',
+      befund: befund || null,
+      closed_by: state.currentUser.id
+    });
+    showToast('✅ Ticket erledigt');
+    loadTickets();
+  } catch (err) {
+    alert('Fehler: ' + err.message);
+  }
+}
+
+async function handleDeleteTicket(id) {
+  if (!confirm('Ticket wirklich löschen?')) return;
+  try {
+    await api('DELETE', `/tickets/${id}`);
+    showToast('🗑️ Ticket gelöscht');
+    loadTickets();
+  } catch (err) {
+    alert('Fehler: ' + err.message);
+  }
+}
+
+// ==================== TOUR & TICKETS TAB (EMPLOYEE) ====================
+function renderTourTickets() {
+  const today = new Date().toISOString().slice(0, 10);
+  const ticketTypes = [
+    { value: 'dichtheit', label: 'Dichtheitsprüfung' },
+    { value: 'terminwunsch', label: 'Terminwunsch' },
+    { value: 'zusatzarbeit', label: 'Zusatzarbeit' },
+    { value: 'mangel', label: 'Mangel/Beanstandung' },
+    { value: 'sonstiges', label: 'Sonstiges' }
+  ];
+
+  return `
+  <h2 class="text-xl font-bold text-gray-800 mb-6">🗺️ Tour & Tickets</h2>
+
+  <!-- Date selector -->
+  <div class="mb-6">
+    <label class="block text-sm font-semibold text-gray-600 mb-2">Datum auswählen</label>
+    <input type="date" id="tour-date" value="${today}" 
+      class="border-2 border-gray-200 rounded-xl px-4 py-2.5 focus:outline-none focus:border-blue-500" />
+    <button data-action="load-tour-events" 
+      class="ml-3 bg-blue-600 text-white px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-blue-700 transition">
+      Laden
+    </button>
+  </div>
+
+  <!-- Calendar Events -->
+  <div class="mb-8">
+    <h3 class="font-semibold text-gray-700 mb-4">📅 Kalender-Events</h3>
+    <div id="calendar-events-container" class="text-center py-8 text-gray-400">
+      Datum auswählen und "Laden" klicken um Kalender-Events anzuzeigen.
+    </div>
+  </div>
+
+  <!-- My Tours -->
+  <div class="mb-8">
+    <h3 class="font-semibold text-gray-700 mb-4">🗺️ Meine Touren</h3>
+    <div id="my-tours-container" class="text-center py-8 text-gray-400">
+      Lade Touren...
+    </div>
+  </div>
+
+  <!-- Recent Tickets -->
+  <div>
+    <h3 class="font-semibold text-gray-700 mb-4">🎫 Meine Tickets</h3>
+    <div id="my-tickets-container" class="text-center py-8 text-gray-400">
+      Lade Tickets...
+    </div>
+  </div>
+
+  <!-- Ticket Modal (hidden by default) -->
+  <div id="ticket-modal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[80vh] flex flex-col">
+      <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+        <h2 class="text-lg font-bold text-gray-800">🎫 Ticket erstellen</h2>
+        <button id="ticket-modal-close" class="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
+      </div>
+      <div class="overflow-y-auto flex-1 p-6">
+        <form id="ticket-form" class="space-y-4">
+          <input type="hidden" id="ticket-event-data" />
+          <div>
+            <label class="block text-sm font-semibold text-gray-600 mb-1">Typ *</label>
+            <select id="ticket-type" required class="w-full border-2 border-gray-200 rounded-xl px-4 py-2.5 focus:outline-none focus:border-blue-500">
+              ${ticketTypes.map(t => `<option value="${t.value}">${t.label}</option>`).join('')}
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-semibold text-gray-600 mb-1">Notiz</label>
+            <textarea id="ticket-notiz" rows="3" placeholder="Beschreibung des Problems oder der zusätzlichen Arbeit..."
+              class="w-full border-2 border-gray-200 rounded-xl px-4 py-2.5 focus:outline-none focus:border-blue-500"></textarea>
+          </div>
+          <div class="flex gap-3">
+            <button type="submit" class="flex-1 bg-green-600 hover:bg-green-700 text-white font-semibold py-2.5 px-4 rounded-xl transition">
+              💾 Ticket speichern
+            </button>
+            <button type="button" id="ticket-modal-cancel" class="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold py-2.5 px-4 rounded-xl transition">
+              Abbrechen
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>`;
+}
+
+// ==================== EMPLOYEE TOUR & TICKETS DATA LOADERS ====================
+async function loadCalendarEvents() {
+  const container = document.getElementById('calendar-events-container');
+  const dateInput = document.getElementById('tour-date');
+  if (!container || !dateInput) return;
+
+  const date = dateInput.value;
+  if (!date) {
+    container.innerHTML = '<div class="text-gray-400">Bitte Datum auswählen.</div>';
+    return;
+  }
+
+  container.innerHTML = '<div class="text-blue-500">Lade Kalender-Events...</div>';
+
+  try {
+    const events = await api('GET', `/calendar/events?date=${date}`);
+    state.calendarEvents = events;
+    
+    if (events.length === 0) {
+      container.innerHTML = '<div class="text-gray-400">Keine Kalender-Events für dieses Datum gefunden.</div>';
+      return;
+    }
+
+    let html = '<div class="space-y-3">';
+    events.forEach(event => {
+      const eventTime = event.allDay ? 'Ganztägig' : (new Date(event.start).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }));
+      const eventAddress = event.address ? ` - ${event.address}` : '';
+      
+      html += `
+        <div class="border border-gray-200 rounded-xl p-4 hover:bg-gray-50">
+          <div class="flex items-center justify-between">
+            <div>
+              <div class="font-medium text-gray-800">${event.title}${eventAddress}</div>
+              <div class="text-sm text-gray-500">${eventTime}</div>
+            </div>
+            <button data-action="create-ticket-from-event" 
+              data-event='${JSON.stringify(event).replace(/'/g, "&apos;")}'
+              class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-sm font-medium transition">
+              🎫 Ticket
+            </button>
+          </div>
+        </div>`;
+    });
+    html += '</div>';
+    container.innerHTML = html;
+    attachListeners();
+  } catch (e) {
+    container.innerHTML = `<div class="text-red-500 text-sm">Fehler: ${e.message}</div>`;
+  }
+}
+
+async function loadMyTours() {
+  const container = document.getElementById('my-tours-container');
+  if (!container) return;
+
+  try {
+    const tours = await api('GET', '/tours');
+    const myTours = tours.filter(tour => 
+      tour.mitarbeiter_ids.includes(state.currentUser.id)
+    );
+
+    if (myTours.length === 0) {
+      container.innerHTML = '<div class="text-gray-400">Keine Touren zugewiesen.</div>';
+      return;
+    }
+
+    let html = '<div class="space-y-3">';
+    myTours.forEach(tour => {
+      html += `
+        <div class="border border-gray-200 rounded-xl p-4 hover:bg-gray-50">
+          <div class="flex items-center justify-between">
+            <div>
+              <div class="font-medium text-gray-800">${tour.name}</div>
+              <div class="text-sm text-gray-500">${tour.turnus} - ${tour.beschreibung || 'Keine Beschreibung'}</div>
+            </div>
+            <button data-action="create-ticket-from-tour" 
+              data-tour-id="${tour.id}"
+              data-tour-name="${tour.name}"
+              class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-sm font-medium transition">
+              🎫 Ticket
+            </button>
+          </div>
+        </div>`;
+    });
+    html += '</div>';
+    container.innerHTML = html;
+    attachListeners();
+  } catch (e) {
+    container.innerHTML = `<div class="text-red-500 text-sm">Fehler: ${e.message}</div>`;
+  }
+}
+
+async function loadMyTickets() {
+  const container = document.getElementById('my-tickets-container');
+  if (!container) return;
+
+  try {
+    const tickets = await api('GET', `/tickets?employee_id=${state.currentUser.id}`);
+    state.tickets = tickets;
+    
+    if (tickets.length === 0) {
+      container.innerHTML = '<div class="text-gray-400">Noch keine Tickets erstellt.</div>';
+      return;
+    }
+
+    const ticketTypeLabels = {
+      dichtheit: 'Dichtheitsprüfung',
+      terminwunsch: 'Terminwunsch',
+      zusatzarbeit: 'Zusatzarbeit',
+      mangel: 'Mangel/Beanstandung',
+      sonstiges: 'Sonstiges'
+    };
+
+    let html = '<div class="space-y-3">';
+    tickets.forEach(ticket => {
+      const customerInfo = ticket.customer_name ? `${ticket.customer_name}, ${ticket.strasse} ${ticket.hnr}` : (ticket.tour_name || ticket.calendar_event_title || '—');
+      const statusBadge = ticket.status === 'offen' 
+        ? '<span class="px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">Offen</span>'
+        : '<span class="px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">Erledigt</span>';
+
+      html += `
+        <div class="border border-gray-200 rounded-xl p-4 hover:bg-gray-50">
+          <div class="flex items-center justify-between">
+            <div class="flex-1">
+              <div class="font-medium text-gray-800">${ticketTypeLabels[ticket.ticket_type] || ticket.ticket_type}</div>
+              <div class="text-sm text-gray-600">${customerInfo}</div>
+              <div class="text-sm text-gray-500">${new Date(ticket.created_at).toLocaleDateString('de-DE')} - ${ticket.notiz || 'Keine Notiz'}</div>
+            </div>
+            <div class="ml-4">${statusBadge}</div>
+          </div>
+        </div>`;
+    });
+    html += '</div>';
+    container.innerHTML = html;
+  } catch (e) {
+    container.innerHTML = `<div class="text-red-500 text-sm">Fehler: ${e.message}</div>`;
+  }
+}
+
+async function handleCreateTicketFromEvent(e) {
+  const eventData = JSON.parse(e.currentTarget.dataset.event.replace(/&apos;/g, "'"));
+  const modal = document.getElementById('ticket-modal');
+  const eventDataInput = document.getElementById('ticket-event-data');
+  
+  if (modal && eventDataInput) {
+    eventDataInput.value = JSON.stringify(eventData);
+    modal.classList.remove('hidden');
+  }
+}
+
+async function handleCreateTicketFromTour(e) {
+  const tourId = e.currentTarget.dataset.tourId;
+  const tourName = e.currentTarget.dataset.tourName;
+  const modal = document.getElementById('ticket-modal');
+  const eventDataInput = document.getElementById('ticket-event-data');
+  
+  if (modal && eventDataInput) {
+    eventDataInput.value = JSON.stringify({ type: 'tour', tour_id: tourId, tour_name: tourName });
+    modal.classList.remove('hidden');
+  }
+}
+
+async function handleSaveTicket(e) {
+  e.preventDefault();
+  const eventDataInput = document.getElementById('ticket-event-data');
+  const eventData = eventDataInput ? JSON.parse(eventDataInput.value) : null;
+  
+  const payload = {
+    employee_id: state.currentUser.id,
+    ticket_type: document.getElementById('ticket-type').value,
+    notiz: document.getElementById('ticket-notiz').value
+  };
+
+  // Add event or tour reference
+  if (eventData) {
+    if (eventData.type === 'tour') {
+      payload.tour_id = eventData.tour_id;
+    } else {
+      payload.calendar_event_title = eventData.title;
+      payload.calendar_event_address = eventData.address;
+      payload.calendar_event_datetime = eventData.start;
+    }
+  }
+
+  try {
+    await api('POST', '/tickets', payload);
+    showToast('✅ Ticket gespeichert');
+    
+    // Close modal and reset form
+    document.getElementById('ticket-modal').classList.add('hidden');
+    document.getElementById('ticket-form').reset();
+    
+    // Reload data
+    loadMyTickets();
+  } catch (err) {
+    alert('Fehler: ' + err.message);
+  }
 }
 
 // ==================== START ====================

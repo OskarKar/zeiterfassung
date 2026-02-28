@@ -79,6 +79,67 @@ insertSetting.run('break_threshold_hours', '6');
 insertSetting.run('break_duration_minutes', '30');
 insertSetting.run('taggeld_satz', '1.27');
 
+// ==================== NEW TABLES FOR TICKET SYSTEM ====================
+db.exec(`
+  CREATE TABLE IF NOT EXISTS customers (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    kundennummer  TEXT UNIQUE,
+    name          TEXT NOT NULL,
+    vorname       TEXT,
+    nachname      TEXT,
+    strasse       TEXT,
+    hnr           TEXT,
+    plz           TEXT,
+    ort           TEXT,
+    telefon       TEXT,
+    email         TEXT,
+    bemerkung     TEXT,
+    created_at    TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at    TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS tours (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    name          TEXT NOT NULL,
+    beschreibung  TEXT,
+    turnus        TEXT NOT NULL DEFAULT 'taeglich', -- taeglich, woechentlich, monatlich, jaehrlich
+    mitarbeiter_ids TEXT, -- JSON array of employee IDs
+    created_at    TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at    TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS tour_customers (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    tour_id       INTEGER NOT NULL REFERENCES tours(id) ON DELETE CASCADE,
+    customer_id   INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+    reihenfolge   INTEGER NOT NULL DEFAULT 0,
+    created_at    TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(tour_id, customer_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS tickets (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    employee_id         INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+    entry_id            INTEGER REFERENCES entries(id) ON DELETE SET NULL,
+    tour_id             INTEGER REFERENCES tours(id) ON DELETE SET NULL,
+    customer_id         INTEGER REFERENCES customers(id) ON DELETE SET NULL,
+    calendar_event_title TEXT,
+    calendar_event_address TEXT,
+    calendar_event_datetime TEXT,
+    ticket_type          TEXT NOT NULL, -- dichtheit, terminwunsch, zusatzarbeit, mangel, sonstiges
+    notiz               TEXT,
+    status              TEXT NOT NULL DEFAULT 'offen', -- offen, erledigt
+    befund              TEXT,
+    created_at          TEXT NOT NULL DEFAULT (datetime('now')),
+    closed_at           TEXT,
+    closed_by           INTEGER REFERENCES employees(id) ON DELETE SET NULL
+  );
+`);
+
+// New default settings for ticket system
+insertSetting.run('calendar_ical_url', '');
+insertSetting.run('tickets_enabled', 'false'); // Feature flag for employee access
+
 // ==================== EMPLOYEE QUERIES ====================
 const getEmployees = db.prepare('SELECT id, name, vorname, nachname, geburtsdatum, is_boss, pin, created_at FROM employees ORDER BY name');
 const getEmployeeById = db.prepare('SELECT id, name, vorname, nachname, geburtsdatum, is_boss, pin, created_at FROM employees WHERE id = ?');
@@ -175,6 +236,110 @@ function calculateTimes(startTime, endTime, breakThresholdHours, breakDurationMi
   return { grossMinutes, breakMinutes, netMinutes };
 }
 
+// ==================== CUSTOMER QUERIES ====================
+const getCustomers = db.prepare('SELECT * FROM customers ORDER BY name, nachname');
+const getCustomerById = db.prepare('SELECT * FROM customers WHERE id = ?');
+const getCustomerByKundennummer = db.prepare('SELECT * FROM customers WHERE kundennummer = ?');
+const insertCustomer = db.prepare(`
+  INSERT INTO customers (kundennummer, name, vorname, nachname, strasse, hnr, plz, ort, telefon, email, bemerkung)
+  VALUES (@kundennummer, @name, @vorname, @nachname, @strasse, @hr, @plz, @ort, @telefon, @email, @bemerkung)
+`);
+const updateCustomer = db.prepare(`
+  UPDATE customers SET kundennummer=@kundennummer, name=@name, vorname=@vorname, nachname=@nachname,
+    strasse=@strasse, hnr=@hr, plz=@plz, ort=@ort, telefon=@telefon, email=@email, bemerkung=@bemerkung,
+    updated_at=datetime('now') WHERE id=@id
+`);
+const deleteCustomer = db.prepare('DELETE FROM customers WHERE id = ?');
+
+// ==================== TOUR QUERIES ====================
+const getTours = db.prepare('SELECT * FROM tours ORDER BY name');
+const getTourById = db.prepare('SELECT * FROM tours WHERE id = ?');
+const insertTour = db.prepare(`
+  INSERT INTO tours (name, beschreibung, turnus, mitarbeiter_ids)
+  VALUES (@name, @beschreibung, @turnus, @mitarbeiter_ids)
+`);
+const updateTour = db.prepare(`
+  UPDATE tours SET name=@name, beschreibung=@beschreibung, turnus=@turnus, mitarbeiter_ids=@mitarbeiter_ids,
+    updated_at=datetime('now') WHERE id=@id
+`);
+const deleteTour = db.prepare('DELETE FROM tours WHERE id = ?');
+
+// ==================== TOUR_CUSTOMERS QUERIES ====================
+const getTourCustomers = db.prepare(`
+  SELECT tc.*, c.name, c.strasse, c.hnr, c.plz, c.ort
+  FROM tour_customers tc
+  JOIN customers c ON tc.customer_id = c.id
+  WHERE tc.tour_id = ? ORDER BY tc.reihenfolge
+`);
+const addCustomerToTour = db.prepare(`
+  INSERT OR REPLACE INTO tour_customers (tour_id, customer_id, reihenfolge)
+  VALUES (@tour_id, @customer_id, @reihenfolge)
+`);
+const removeCustomerFromTour = db.prepare('DELETE FROM tour_customers WHERE tour_id = ? AND customer_id = ?');
+
+// ==================== TICKET QUERIES ====================
+const getTickets = db.prepare(`
+  SELECT t.*, emp.name as employee_name, c.name as customer_name, c.strasse, c.hnr, c.plz, c.ort,
+         tour.name as tour_name
+  FROM tickets t
+  LEFT JOIN employees emp ON emp.id = t.employee_id
+  LEFT JOIN customers c ON c.id = t.customer_id
+  LEFT JOIN tours tour ON tour.id = t.tour_id
+  ORDER BY t.created_at DESC
+`);
+const getTicketsByStatus = db.prepare(`
+  SELECT t.*, emp.name as employee_name, c.name as customer_name, c.strasse, c.hnr, c.plz, c.ort,
+         tour.name as tour_name
+  FROM tickets t
+  LEFT JOIN employees emp ON emp.id = t.employee_id
+  LEFT JOIN customers c ON c.id = t.customer_id
+  LEFT JOIN tours tour ON tour.id = t.tour_id
+  WHERE t.status = ? ORDER BY t.created_at DESC
+`);
+const getTicketsByEmployee = db.prepare(`
+  SELECT t.*, emp.name as employee_name, c.name as customer_name, c.strasse, c.hnr, c.plz, c.ort,
+         tour.name as tour_name
+  FROM tickets t
+  LEFT JOIN employees emp ON emp.id = t.employee_id
+  LEFT JOIN customers c ON c.id = t.customer_id
+  LEFT JOIN tours tour ON tour.id = t.tour_id
+  WHERE t.employee_id = ? ORDER BY t.created_at DESC
+`);
+const getTicketById = db.prepare(`
+  SELECT t.*, emp.name as employee_name, c.name as customer_name, c.strasse, c.hnr, c.plz, c.ort,
+         tour.name as tour_name
+  FROM tickets t
+  LEFT JOIN employees emp ON emp.id = t.employee_id
+  LEFT JOIN customers c ON c.id = t.customer_id
+  LEFT JOIN tours tour ON tour.id = t.tour_id
+  WHERE t.id = ?
+`);
+const insertTicket = db.prepare(`
+  INSERT INTO tickets (employee_id, entry_id, tour_id, customer_id, calendar_event_title,
+    calendar_event_address, calendar_event_datetime, ticket_type, notiz, status)
+  VALUES (@employee_id, @entry_id, @tour_id, @customer_id, @calendar_event_title,
+    @calendar_event_address, @calendar_event_datetime, @ticket_type, @notiz, @status)
+`);
+const updateTicket = db.prepare(`
+  UPDATE tickets SET ticket_type=@ticket_type, notiz=@notiz, befund=@befund, status=@status,
+    closed_at=@closed_at, closed_by=@closed_by WHERE id=@id
+`);
+const deleteTicket = db.prepare('DELETE FROM tickets WHERE id = ?');
+
+// ==================== JSON HELPERS ====================
+function parseJsonArray(jsonStr) {
+  if (!jsonStr) return [];
+  try {
+    return JSON.parse(jsonStr);
+  } catch {
+    return [];
+  }
+}
+
+function stringifyJsonArray(arr) {
+  return JSON.stringify(arr || []);
+}
+
 module.exports = {
   db,
   getEmployees,
@@ -195,4 +360,28 @@ module.exports = {
   upsertSetting,
   getSettings,
   calculateTimes,
+  // New ticket system exports
+  getCustomers,
+  getCustomerById,
+  getCustomerByKundennummer,
+  insertCustomer,
+  updateCustomer,
+  deleteCustomer,
+  getTours,
+  getTourById,
+  insertTour,
+  updateTour,
+  deleteTour,
+  getTourCustomers,
+  addCustomerToTour,
+  removeCustomerFromTour,
+  getTickets,
+  getTicketsByStatus,
+  getTicketsByEmployee,
+  getTicketById,
+  insertTicket,
+  updateTicket,
+  deleteTicket,
+  parseJsonArray,
+  stringifyJsonArray,
 };

@@ -135,6 +135,16 @@ Dann: `http://localhost:3000`
 | **PDF Export** | Monatsbericht im Lohnverrechnungs-Format |
 | **Integritäts-Schutz** | HMAC-SHA256 Hash pro Eintrag – Manipulationen erkennbar |
 | **SQLite WAL** | Sicher für gleichzeitige Zugriffe im Netzwerk |
+| **Mitarbeiterzeit-Erfassung** | mit Pausenberechnung |
+| **Boss-Dashboard** | mit Live-Ansicht und Filtern |
+| **Excel-Import** | für Massen-Import von Arbeitszeiten |
+| **PDF-Export** | für Lohnabrechnungen |
+| **Audit-Log** | für alle Änderungen |
+| **Statistik & Analyse** | mit Anomalie-Erkennung |
+| **🎫 Ticket-System** | für Schornsteinfeger-Aufgaben |
+| **🗺️ Tour-Verwaltung** | mit Mitarbeiter-Zuweisung |
+| **👥 Kunden-Verwaltung** | mit CSV-Import |
+| **📅 Google Kalender Integration** | für Tour-Planung |
 
 ---
 
@@ -145,9 +155,43 @@ Im Admin-Bereich (Tab „Einstellungen") konfigurierbar:
 | Einstellung | Standard |
 |---|---|
 | Admin-PIN | `1234` |
-| Taggeld-Satz (€/Std.) | `1.27` |
-| Pausengrenze (Stunden) | `6` |
-| Pausendauer (Minuten) | `30` |
+| Pausengrenze | `6` Stunden |
+| Pausendauer | `30` Minuten |
+| Taggeld-Satz | `1.27 €/Std.` |
+| Google Kalender iCal-URL | leer |
+| Tour & Tickets für Mitarbeiter | `deaktiviert` |
+
+---
+
+## 🎫 Ticket-System Workflow
+
+### Für Mitarbeiter (nach Aktivierung)
+
+1. **Zeiten erfassen** wie gewohnt
+2. **Tab "Tour & Tickets"** öffnen
+3. **Datum auswählen** → Kalender-Events des Tages laden
+4. **Ticket erstellen** für:
+   - Kalender-Event (Kunde aus Google Kalender)
+   - Hinterlegte Tour (regelmäßige Route)
+5. **Ticket-Typ wählen**: Dichtheitsprüfung, Terminwunsch, Zusatzarbeit, Mangel, Sonstiges
+6. **Notiz eingeben** → speichern
+
+### Für Chef (Boss)
+
+1. **Tab "Kunden"** → CSV-Import der Kundendaten
+2. **Tab "Touren"** → Touren anlegen, Mitarbeiter zuweisen
+3. **Tab "Tickets"** → Alle Tickets einsehen, filtern, bearbeiten
+4. **Ticket abschließen** → Befund eingeben, Status auf "erledigt" setzen
+
+### Ticket-Typen
+
+| Typ | Verwendung |
+|---|---|
+| **Dichtheitsprüfung** | Durchgeführte Dichtheitsprüfung dokumentieren |
+| **Terminwunsch** | Kunde wünscht neuen Termin |
+| **Zusatzarbeit** | Zusätzliche Arbeit über Standard hinaus |
+| **Mangel/Beanstandung** | Gefundene Mängel oder Beanstandungen |
+| **Sonstiges** | Alle anderen besonderen Vorkommnisse |
 
 ---
 

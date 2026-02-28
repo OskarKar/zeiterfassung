@@ -66,12 +66,41 @@ app.locals.getEmployeeById = getEmployeeById;
 app.locals.calculateTimes = calculateTimes;
 app.locals.makeHash = makeHash;
 app.locals.getSecret = getSecret;
+// New ticket system helpers
+app.locals.getCustomers = getCustomers;
+app.locals.getCustomerById = getCustomerById;
+app.locals.getCustomerByKundennummer = getCustomerByKundennummer;
+app.locals.insertCustomer = insertCustomer;
+app.locals.updateCustomer = updateCustomer;
+app.locals.deleteCustomer = deleteCustomer;
+app.locals.getTours = getTours;
+app.locals.getTourById = getTourById;
+app.locals.insertTour = insertTour;
+app.locals.updateTour = updateTour;
+app.locals.deleteTour = deleteTour;
+app.locals.getTourCustomers = getTourCustomers;
+app.locals.addCustomerToTour = addCustomerToTour;
+app.locals.removeCustomerFromTour = removeCustomerFromTour;
+app.locals.getTickets = getTickets;
+app.locals.getTicketsByStatus = getTicketsByStatus;
+app.locals.getTicketsByEmployee = getTicketsByEmployee;
+app.locals.getTicketById = getTicketById;
+app.locals.insertTicket = insertTicket;
+app.locals.updateTicket = updateTicket;
+app.locals.deleteTicket = deleteTicket;
+app.locals.parseJsonArray = parseJsonArray;
+app.locals.stringifyJsonArray = stringifyJsonArray;
 
 // ==================== ROUTE MODULES ====================
 app.use('/api/employees', require('./routes/employees'));
 app.use('/api/import',    require('./routes/import'));
 app.use('/api/export',    require('./routes/export'));
 app.use('/api/stats',     require('./routes/stats'));
+// New ticket system routes
+app.use('/api/customers', require('./routes/customers'));
+app.use('/api/tours',     require('./routes/tours'));
+app.use('/api/tickets',   require('./routes/tickets'));
+app.use('/api/calendar',  require('./routes/calendar'));
 
 // ==================== ENTRY ROUTES ====================
 app.get('/api/entries', (req, res) => {
@@ -203,7 +232,7 @@ app.get('/api/settings', (req, res) => {
 });
 
 app.post('/api/settings', (req, res) => {
-  const allowed = ['boss_pin', 'break_threshold_hours', 'break_duration_minutes', 'taggeld_satz'];
+  const allowed = ['boss_pin', 'break_threshold_hours', 'break_duration_minutes', 'taggeld_satz', 'calendar_ical_url', 'tickets_enabled'];
   for (const [key, value] of Object.entries(req.body)) {
     if (allowed.includes(key)) {
       upsertSetting.run(key, String(value));
