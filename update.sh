@@ -31,13 +31,21 @@ log "Update gestartet: $(date '+%Y-%m-%d %H:%M:%S')"
 log "========================================="
 
 log "[1/3] Dateien von GitHub herunterladen..."
-wget -q -O "$DIR/client/app.js"            "$BASE/client/app.js"            || { log "FEHLER: app.js"; exit 1; }
-wget -q -O "$DIR/server/index.js"          "$BASE/server/index.js"          || { log "FEHLER: index.js"; exit 1; }
-wget -q -O "$DIR/server/package.json"      "$BASE/server/package.json"      || { log "FEHLER: package.json"; exit 1; }
-wget -q -O "$DIR/server/routes/export.js" "$BASE/server/routes/export.js" || { log "FEHLER: export.js"; exit 1; }
-wget -q -O "$DIR/Dockerfile"               "$BASE/Dockerfile"               || { log "FEHLER: Dockerfile"; exit 1; }
-wget -q -O "$DIR/docker-compose.yml"       "$BASE/docker-compose.yml"       || { log "FEHLER: docker-compose.yml"; exit 1; }
-wget -q -O "$DIR/update.sh"                "$BASE/update.sh"                || { log "FEHLER: update.sh"; exit 1; }
+wget -q -O "$DIR/client/app.js"                  "$BASE/client/app.js"                  || { log "FEHLER: app.js"; exit 1; }
+wget -q -O "$DIR/server/index.js"                "$BASE/server/index.js"                || { log "FEHLER: index.js"; exit 1; }
+wget -q -O "$DIR/server/db.js"                   "$BASE/server/db.js"                   || { log "FEHLER: db.js"; exit 1; }
+wget -q -O "$DIR/server/package.json"            "$BASE/server/package.json"            || { log "FEHLER: package.json"; exit 1; }
+wget -q -O "$DIR/server/routes/export.js"        "$BASE/server/routes/export.js"        || { log "FEHLER: export.js"; exit 1; }
+wget -q -O "$DIR/server/routes/employees.js"     "$BASE/server/routes/employees.js"     || { log "FEHLER: employees.js"; exit 1; }
+wget -q -O "$DIR/server/routes/import.js"        "$BASE/server/routes/import.js"        || { log "FEHLER: import.js"; exit 1; }
+wget -q -O "$DIR/server/routes/tickets.js"       "$BASE/server/routes/tickets.js"       || { log "FEHLER: tickets.js"; exit 1; }
+wget -q -O "$DIR/server/routes/customers.js"     "$BASE/server/routes/customers.js"     || { log "FEHLER: customers.js"; exit 1; }
+wget -q -O "$DIR/server/routes/calendar.js"      "$BASE/server/routes/calendar.js"      || { log "FEHLER: calendar.js"; exit 1; }
+wget -q -O "$DIR/server/routes/tours.js"         "$BASE/server/routes/tours.js"         || { log "FEHLER: tours.js"; exit 1; }
+wget -q -O "$DIR/server/routes/stats.js"         "$BASE/server/routes/stats.js"         || { log "FEHLER: stats.js"; exit 1; }
+wget -q -O "$DIR/Dockerfile"                     "$BASE/Dockerfile"                     || { log "FEHLER: Dockerfile"; exit 1; }
+wget -q -O "$DIR/docker-compose.yml"             "$BASE/docker-compose.yml"             || { log "FEHLER: docker-compose.yml"; exit 1; }
+wget -q -O "$DIR/update.sh"                      "$BASE/update.sh"                      || { log "FEHLER: update.sh"; exit 1; }
 log "[1/3] Download abgeschlossen."
 
 cd "$DIR" || { log "FEHLER: cd $DIR fehlgeschlagen"; exit 1; }
