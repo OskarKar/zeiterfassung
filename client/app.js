@@ -300,6 +300,18 @@ function renderErfassung() {
       </div>
     </div>
 
+    <!-- Route selection (only visible for Kehrtour) -->
+    <div id="route-selection" class="hidden">
+      <label class="block text-sm font-semibold text-gray-600 mb-1">Route auswählen</label>
+      <select id="f-route" class="w-full border-2 border-gray-200 rounded-xl px-4 py-2.5 focus:outline-none focus:border-blue-500">
+        <option value="">-- Keine Route --</option>
+      </select>
+      <div id="route-customers" class="mt-3 hidden">
+        <div class="text-xs font-semibold text-gray-500 mb-2">Objekte auf dieser Route:</div>
+        <div id="route-customers-list" class="space-y-1 max-h-48 overflow-y-auto"></div>
+      </div>
+    </div>
+
     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
       <div>
         <label class="block text-sm font-semibold text-gray-600 mb-1">Trinkgeld (€)</label>
@@ -897,6 +909,20 @@ function attachListeners() {
     entryForm.querySelectorAll('input, select, textarea').forEach(input => {
       input.addEventListener('input', handleTyping);
     });
+  }
+
+  // Category change handler for route selection
+  const categorySelect = document.getElementById('f-category');
+  if (categorySelect) {
+    categorySelect.addEventListener('change', handleCategoryChange);
+    // Initialize on page load
+    handleCategoryChange({ target: categorySelect });
+  }
+
+  // Route change handler
+  const routeSelect = document.getElementById('f-route');
+  if (routeSelect) {
+    routeSelect.addEventListener('change', handleRouteChange);
   }
 
   // Settings form
@@ -2696,6 +2722,63 @@ async function handleCreateTicketFromTour(e) {
   if (modal && eventDataInput) {
     eventDataInput.value = JSON.stringify({ type: 'tour', tour_id: tourId, tour_name: tourName });
     modal.classList.remove('hidden');
+  }
+}
+
+async function handleCategoryChange(e) {
+  const category = e.target.value;
+  const routeSelection = document.getElementById('route-selection');
+  const routeSelect = document.getElementById('f-route');
+  
+  if (!routeSelection || !routeSelect) return;
+  
+  if (category === 'kehrtour') {
+    routeSelection.classList.remove('hidden');
+    // Load available routes
+    try {
+      const routes = await api('GET', '/customers/routes');
+      routeSelect.innerHTML = '<option value="">-- Keine Route --</option>' +
+        routes.map(r => `<option value="${r}">${r}</option>`).join('');
+    } catch (err) {
+      console.error('Failed to load routes:', err);
+    }
+  } else {
+    routeSelection.classList.add('hidden');
+    document.getElementById('route-customers')?.classList.add('hidden');
+  }
+}
+
+async function handleRouteChange(e) {
+  const routeName = e.target.value;
+  const routeCustomersDiv = document.getElementById('route-customers');
+  const routeCustomersList = document.getElementById('route-customers-list');
+  
+  if (!routeCustomersDiv || !routeCustomersList) return;
+  
+  if (!routeName) {
+    routeCustomersDiv.classList.add('hidden');
+    return;
+  }
+  
+  try {
+    const customers = await api('GET', `/customers/route/${encodeURIComponent(routeName)}`);
+    if (customers.length === 0) {
+      routeCustomersDiv.classList.add('hidden');
+      return;
+    }
+    
+    routeCustomersList.innerHTML = customers.map(c => `
+      <div class="text-xs p-2 bg-gray-50 rounded border border-gray-200">
+        <div class="font-semibold text-gray-700">${c.kehrbuch_order || '?'}. ${c.name || c.titelname || 'Unbekannt'}</div>
+        <div class="text-gray-500">${c.strasse || ''} ${c.hnr || ''}, ${c.plz || ''} ${c.ort || ''}</div>
+        ${c.time_range ? `<div class="text-gray-400 mt-1">⏰ ${c.time_range}</div>` : ''}
+      </div>
+    `).join('');
+    
+    routeCustomersDiv.classList.remove('hidden');
+  } catch (err) {
+    console.error('Failed to load route customers:', err);
+    routeCustomersDiv.classList.add('hidden');
   }
 }
 
