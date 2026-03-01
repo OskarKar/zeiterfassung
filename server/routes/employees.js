@@ -24,7 +24,7 @@ function auditLog(db, aktion, datensatz_id, geaendert_von, alt, neu) {
 router.get('/', (req, res) => {
   const db = req.app.locals.db;
   const rows = db.prepare(
-    'SELECT id, name, vorname, nachname, geburtsdatum, is_boss, pin, created_at FROM employees ORDER BY name'
+    'SELECT id, name, vorname, nachname, geburtsdatum, is_boss, pin, calendar_ical_url, created_at FROM employees ORDER BY name'
   ).all();
   res.json(rows);
 });
@@ -33,7 +33,7 @@ router.get('/', (req, res) => {
 router.get('/:id', (req, res) => {
   const db = req.app.locals.db;
   const row = db.prepare(
-    'SELECT id, name, vorname, nachname, geburtsdatum, is_boss, pin, created_at FROM employees WHERE id = ?'
+    'SELECT id, name, vorname, nachname, geburtsdatum, is_boss, pin, calendar_ical_url, created_at FROM employees WHERE id = ?'
   ).get(req.params.id);
   if (!row) return res.status(404).json({ error: 'Nicht gefunden' });
   res.json(row);
@@ -42,7 +42,7 @@ router.get('/:id', (req, res) => {
 // POST /api/employees  — Anlegen
 router.post('/', (req, res) => {
   const db = req.app.locals.db;
-  const { name, vorname = '', nachname = '', geburtsdatum = '', is_boss = 0, pin = null, password = '' } = req.body;
+  const { name, vorname = '', nachname = '', geburtsdatum = '', is_boss = 0, pin = null, password = '', calendar_ical_url = '' } = req.body;
 
   if (!name || !name.trim()) return res.status(400).json({ error: 'Name erforderlich' });
 
@@ -50,8 +50,8 @@ router.post('/', (req, res) => {
 
   try {
     const result = db.prepare(
-      'INSERT INTO employees (name, vorname, nachname, geburtsdatum, is_boss, pin, password_hash) VALUES (?,?,?,?,?,?,?)'
-    ).run(name.trim(), vorname.trim(), nachname.trim(), geburtsdatum || null, is_boss, pin, password_hash);
+      'INSERT INTO employees (name, vorname, nachname, geburtsdatum, is_boss, pin, password_hash, calendar_ical_url) VALUES (?,?,?,?,?,?,?,?)'
+    ).run(name.trim(), vorname.trim(), nachname.trim(), geburtsdatum || null, is_boss, pin, password_hash, calendar_ical_url || null);
 
     const newId = result.lastInsertRowid;
 
@@ -61,7 +61,7 @@ router.post('/', (req, res) => {
     );
 
     const created = db.prepare(
-      'SELECT id, name, vorname, nachname, geburtsdatum, is_boss, pin, created_at FROM employees WHERE id = ?'
+      'SELECT id, name, vorname, nachname, geburtsdatum, is_boss, pin, calendar_ical_url, created_at FROM employees WHERE id = ?'
     ).get(newId);
     res.json(created);
   } catch (e) {
@@ -85,6 +85,7 @@ router.put('/:id', (req, res) => {
     geburtsdatum= existing.geburtsdatum|| '',
     pin         = existing.pin,
     password    = '',      // only update if non-empty
+    calendar_ical_url = existing.calendar_ical_url || '',
   } = req.body;
 
   if (!name || !name.trim()) return res.status(400).json({ error: 'Name erforderlich' });
@@ -101,8 +102,8 @@ router.put('/:id', (req, res) => {
 
   try {
     db.prepare(
-      'UPDATE employees SET name=?, vorname=?, nachname=?, geburtsdatum=?, pin=?, password_hash=? WHERE id=?'
-    ).run(name.trim(), vorname.trim(), nachname.trim(), geburtsdatum || null, pin, password_hash, id);
+      'UPDATE employees SET name=?, vorname=?, nachname=?, geburtsdatum=?, pin=?, password_hash=?, calendar_ical_url=? WHERE id=?'
+    ).run(name.trim(), vorname.trim(), nachname.trim(), geburtsdatum || null, pin, password_hash, calendar_ical_url || null, id);
 
     auditLog(db, 'UPDATE', parseInt(id), 'Admin',
       altSnapshot,
@@ -110,7 +111,7 @@ router.put('/:id', (req, res) => {
     );
 
     const updated = db.prepare(
-      'SELECT id, name, vorname, nachname, geburtsdatum, is_boss, pin, created_at FROM employees WHERE id = ?'
+      'SELECT id, name, vorname, nachname, geburtsdatum, is_boss, pin, calendar_ical_url, created_at FROM employees WHERE id = ?'
     ).get(id);
     res.json(updated);
   } catch (e) {

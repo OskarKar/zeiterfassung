@@ -22,6 +22,7 @@ db.exec(`
     name       TEXT NOT NULL UNIQUE,
     is_boss    INTEGER NOT NULL DEFAULT 0,
     pin        TEXT,
+    calendar_ical_url TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
@@ -56,6 +57,7 @@ if (!existingCols.includes('vorname'))      db.exec("ALTER TABLE employees ADD C
 if (!existingCols.includes('nachname'))     db.exec("ALTER TABLE employees ADD COLUMN nachname TEXT");
 if (!existingCols.includes('geburtsdatum')) db.exec("ALTER TABLE employees ADD COLUMN geburtsdatum TEXT");
 if (!existingCols.includes('password_hash')) db.exec("ALTER TABLE employees ADD COLUMN password_hash TEXT");
+if (!existingCols.includes('calendar_ical_url')) db.exec("ALTER TABLE employees ADD COLUMN calendar_ical_url TEXT");
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS audit_log (
@@ -163,13 +165,13 @@ insertSetting.run('calendar_ical_url', '');
 insertSetting.run('tickets_enabled', 'false'); // Feature flag for employee access
 
 // ==================== EMPLOYEE QUERIES ====================
-const getEmployees = db.prepare('SELECT id, name, vorname, nachname, geburtsdatum, is_boss, pin, created_at FROM employees ORDER BY name');
-const getEmployeeById = db.prepare('SELECT id, name, vorname, nachname, geburtsdatum, is_boss, pin, created_at FROM employees WHERE id = ?');
+const getEmployees = db.prepare('SELECT id, name, vorname, nachname, geburtsdatum, is_boss, pin, calendar_ical_url, created_at FROM employees ORDER BY name');
+const getEmployeeById = db.prepare('SELECT id, name, vorname, nachname, geburtsdatum, is_boss, pin, calendar_ical_url, created_at FROM employees WHERE id = ?');
 const insertEmployee = db.prepare(
-  'INSERT INTO employees (name, vorname, nachname, geburtsdatum, is_boss, pin, password_hash) VALUES (@name, @vorname, @nachname, @geburtsdatum, @is_boss, @pin, @password_hash)'
+  'INSERT INTO employees (name, vorname, nachname, geburtsdatum, is_boss, pin, password_hash, calendar_ical_url) VALUES (@name, @vorname, @nachname, @geburtsdatum, @is_boss, @pin, @password_hash, @calendar_ical_url)'
 );
 const updateEmployee = db.prepare(
-  'UPDATE employees SET name=@name, vorname=@vorname, nachname=@nachname, geburtsdatum=@geburtsdatum, pin=@pin, password_hash=@password_hash WHERE id=@id'
+  'UPDATE employees SET name=@name, vorname=@vorname, nachname=@nachname, geburtsdatum=@geburtsdatum, pin=@pin, password_hash=@password_hash, calendar_ical_url=@calendar_ical_url WHERE id=@id'
 );
 const deleteEmployee = db.prepare('DELETE FROM employees WHERE id = ?');
 
