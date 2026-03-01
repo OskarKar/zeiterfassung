@@ -3,10 +3,10 @@ version: "3.9"
 services:
   zeiterfassung:
     build: .
-    container_name: zeiterfassung
+    container_name: zeiterfassung-v13
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "3001:3000"
     volumes:
       # Persistent SQLite database — map to a folder on your NAS
       - ./data:/data

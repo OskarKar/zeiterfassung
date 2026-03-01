@@ -5,7 +5,7 @@
 # Die Datenbank in ./data bleibt UNBERÜHRT.
 # ============================================================
 
-DIR="/volume1/docker/zeiterfassung-docker"
+DIR="/volume1/docker/zeiterfassung-docker-v1.3"
 TOKEN_FILE="$DIR/data/.github_token"
 
 if [ ! -f "$TOKEN_FILE" ]; then
@@ -15,7 +15,7 @@ if [ ! -f "$TOKEN_FILE" ]; then
 fi
 
 TOKEN=$(cat "$TOKEN_FILE")
-BASE="https://$TOKEN@raw.githubusercontent.com/OskarKar/zeiterfassung/main"
+BASE="https://$TOKEN@raw.githubusercontent.com/OskarKar/zeiterfassung/v1.3-dev"
 LOG_FILE="$DIR/data/update.log"
 
 mkdir -p "$DIR/data" "$DIR/client" "$DIR/server" "$DIR/server/routes"
