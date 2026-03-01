@@ -167,7 +167,6 @@ app.post('/api/entries', (req, res) => {
     gross_minutes: times.grossMinutes,
     break_minutes: times.breakMinutes,
     net_minutes: times.netMinutes,
-    created_at: new Date().toISOString(),
   };
 
   const secret = getSecret();
@@ -216,8 +215,6 @@ app.put('/api/entries/:id', (req, res) => {
     gross_minutes: times.grossMinutes,
     break_minutes: times.breakMinutes,
     net_minutes: times.netMinutes,
-    created_at: existing.created_at,
-    employee_id: existing.employee_id,
   };
 
   const secret = getSecret();
