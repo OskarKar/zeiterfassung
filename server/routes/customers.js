@@ -213,6 +213,16 @@ router.post('/import', upload.single('file'), (req, res) => {
           }
         });
 
+        // Parse KEHRBUCH field to extract order number (e.g., U201-016 -> 16)
+        if (customerData.kehrbuch_order) {
+          const match = customerData.kehrbuch_order.match(/-?(\d+)$/);
+          if (match) {
+            customerData.kehrbuch_order = parseInt(match[1], 10);
+          } else {
+            customerData.kehrbuch_order = null;
+          }
+        }
+
         // Skip if no name provided
         if (!customerData.name && !customerData.nachname) {
           errors.push(`Zeile ${i + 2}: Kein Name gefunden`);
