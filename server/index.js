@@ -24,6 +24,8 @@ const {
   getCustomers,
   getCustomerById,
   getCustomerByKundennummer,
+  getCustomersByRoute,
+  getDistinctRoutes,
   insertCustomer,
   updateCustomer,
   deleteCustomer,
@@ -93,6 +95,8 @@ app.locals.getSecret = getSecret;
 app.locals.getCustomers = getCustomers;
 app.locals.getCustomerById = getCustomerById;
 app.locals.getCustomerByKundennummer = getCustomerByKundennummer;
+app.locals.getCustomersByRoute = getCustomersByRoute;
+app.locals.getDistinctRoutes = getDistinctRoutes;
 app.locals.insertCustomer = insertCustomer;
 app.locals.updateCustomer = updateCustomer;
 app.locals.deleteCustomer = deleteCustomer;
@@ -160,7 +164,9 @@ app.post('/api/entries', (req, res) => {
     is_outside: is_outside ? 1 : 0,
     tip: parseFloat(tip) || 0,
     description,
-    ...times,
+    gross_minutes: times.grossMinutes,
+    break_minutes: times.breakMinutes,
+    net_minutes: times.netMinutes,
     created_at: new Date().toISOString(),
   };
 
@@ -207,7 +213,9 @@ app.put('/api/entries/:id', (req, res) => {
     is_outside: is_outside ? 1 : 0,
     tip: parseFloat(tip) || 0,
     description,
-    ...times,
+    gross_minutes: times.grossMinutes,
+    break_minutes: times.breakMinutes,
+    net_minutes: times.netMinutes,
     created_at: existing.created_at,
     employee_id: existing.employee_id,
   };

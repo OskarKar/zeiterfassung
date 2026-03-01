@@ -80,17 +80,39 @@ insertSetting.run('break_duration_minutes', '30');
 insertSetting.run('taggeld_satz', '1.27');
 
 // ==================== NEW TABLES FOR TICKET SYSTEM ====================
+// Migration: Add new columns to customers table if they don't exist
+try {
+  db.exec(`ALTER TABLE customers ADD COLUMN titelname TEXT`);
+} catch (e) { /* column exists */ }
+try {
+  db.exec(`ALTER TABLE customers ADD COLUMN route_name TEXT`);
+} catch (e) { /* column exists */ }
+try {
+  db.exec(`ALTER TABLE customers ADD COLUMN kehrbuch_order INTEGER`);
+} catch (e) { /* column exists */ }
+try {
+  db.exec(`ALTER TABLE customers ADD COLUMN zeitraum TEXT`);
+} catch (e) { /* column exists */ }
+try {
+  db.exec(`ALTER TABLE customers ADD COLUMN time_range TEXT`);
+} catch (e) { /* column exists */ }
+
 db.exec(`
   CREATE TABLE IF NOT EXISTS customers (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     kundennummer  TEXT UNIQUE,
     name          TEXT NOT NULL,
+    titelname     TEXT,
     vorname       TEXT,
     nachname      TEXT,
     strasse       TEXT,
     hnr           TEXT,
     plz           TEXT,
     ort           TEXT,
+    route_name    TEXT,
+    kehrbuch_order INTEGER,
+    zeitraum      TEXT,
+    time_range    TEXT,
     telefon       TEXT,
     email         TEXT,
     bemerkung     TEXT,
@@ -240,13 +262,16 @@ function calculateTimes(startTime, endTime, breakThresholdHours, breakDurationMi
 const getCustomers = db.prepare('SELECT * FROM customers ORDER BY name, nachname');
 const getCustomerById = db.prepare('SELECT * FROM customers WHERE id = ?');
 const getCustomerByKundennummer = db.prepare('SELECT * FROM customers WHERE kundennummer = ?');
+const getCustomersByRoute = db.prepare('SELECT * FROM customers WHERE route_name = ? ORDER BY kehrbuch_order, name');
+const getDistinctRoutes = db.prepare('SELECT DISTINCT route_name FROM customers WHERE route_name IS NOT NULL ORDER BY route_name');
 const insertCustomer = db.prepare(`
-  INSERT INTO customers (kundennummer, name, vorname, nachname, strasse, hnr, plz, ort, telefon, email, bemerkung)
-  VALUES (@kundennummer, @name, @vorname, @nachname, @strasse, @hr, @plz, @ort, @telefon, @email, @bemerkung)
+  INSERT INTO customers (kundennummer, name, titelname, vorname, nachname, strasse, hnr, plz, ort, route_name, kehrbuch_order, zeitraum, time_range, telefon, email, bemerkung)
+  VALUES (@kundennummer, @name, @titelname, @vorname, @nachname, @strasse, @hnr, @plz, @ort, @route_name, @kehrbuch_order, @zeitraum, @time_range, @telefon, @email, @bemerkung)
 `);
 const updateCustomer = db.prepare(`
-  UPDATE customers SET kundennummer=@kundennummer, name=@name, vorname=@vorname, nachname=@nachname,
-    strasse=@strasse, hnr=@hr, plz=@plz, ort=@ort, telefon=@telefon, email=@email, bemerkung=@bemerkung,
+  UPDATE customers SET kundennummer=@kundennummer, name=@name, titelname=@titelname, vorname=@vorname, nachname=@nachname,
+    strasse=@strasse, hnr=@hnr, plz=@plz, ort=@ort, route_name=@route_name, kehrbuch_order=@kehrbuch_order,
+    zeitraum=@zeitraum, time_range=@time_range, telefon=@telefon, email=@email, bemerkung=@bemerkung,
     updated_at=datetime('now') WHERE id=@id
 `);
 const deleteCustomer = db.prepare('DELETE FROM customers WHERE id = ?');
@@ -364,6 +389,8 @@ module.exports = {
   getCustomers,
   getCustomerById,
   getCustomerByKundennummer,
+  getCustomersByRoute,
+  getDistinctRoutes,
   insertCustomer,
   updateCustomer,
   deleteCustomer,

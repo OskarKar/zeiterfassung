@@ -5,11 +5,33 @@ const router = express.Router();
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
+// GET /api/customers/routes - list all distinct route names
+router.get('/routes', (req, res) => {
+  const { getDistinctRoutes } = req.app.locals;
+  try {
+    const routes = getDistinctRoutes.all();
+    res.json(routes.map(r => r.route_name));
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // GET /api/customers - list all customers
 router.get('/', (req, res) => {
   const { getCustomers } = req.app.locals;
   try {
     const customers = getCustomers.all();
+    res.json(customers);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/customers/route/:routeName - get customers by route
+router.get('/route/:routeName', (req, res) => {
+  const { getCustomersByRoute } = req.app.locals;
+  try {
+    const customers = getCustomersByRoute.all(req.params.routeName);
     res.json(customers);
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -31,7 +53,7 @@ router.get('/:id', (req, res) => {
 // POST /api/customers - create new customer
 router.post('/', (req, res) => {
   const { insertCustomer, getCustomerByKundennummer } = req.app.locals;
-  const { kundennummer, name, vorname, nachname, strasse, hnr, plz, ort, telefon, email, bemerkung } = req.body;
+  const { kundennummer, name, titelname, vorname, nachname, strasse, hnr, plz, ort, route_name, kehrbuch_order, zeitraum, time_range, telefon, email, bemerkung } = req.body;
 
   if (!name && !nachname) {
     return res.status(400).json({ error: 'Name oder Nachname erforderlich' });
@@ -49,12 +71,17 @@ router.post('/', (req, res) => {
     const result = insertCustomer.run({
       kundennummer: kundennummer || null,
       name: name || '',
+      titelname: titelname || null,
       vorname: vorname || null,
       nachname: nachname || null,
       strasse: strasse || null,
-      hr: hnr || null,
+      hnr: hnr || null,
       plz: plz || null,
       ort: ort || null,
+      route_name: route_name || null,
+      kehrbuch_order: kehrbuch_order || null,
+      zeitraum: zeitraum || null,
+      time_range: time_range || null,
       telefon: telefon || null,
       email: email || null,
       bemerkung: bemerkung || null
@@ -68,7 +95,7 @@ router.post('/', (req, res) => {
 // PUT /api/customers/:id - update customer
 router.put('/:id', (req, res) => {
   const { updateCustomer, getCustomerByKundennummer } = req.app.locals;
-  const { kundennummer, name, vorname, nachname, strasse, hnr, plz, ort, telefon, email, bemerkung } = req.body;
+  const { kundennummer, name, titelname, vorname, nachname, strasse, hnr, plz, ort, route_name, kehrbuch_order, zeitraum, time_range, telefon, email, bemerkung } = req.body;
 
   if (!name && !nachname) {
     return res.status(400).json({ error: 'Name oder Nachname erforderlich' });
@@ -87,12 +114,17 @@ router.put('/:id', (req, res) => {
       id: req.params.id,
       kundennummer: kundennummer || null,
       name: name || '',
+      titelname: titelname || null,
       vorname: vorname || null,
       nachname: nachname || null,
       strasse: strasse || null,
-      hr: hnr || null,
+      hnr: hnr || null,
       plz: plz || null,
       ort: ort || null,
+      route_name: route_name || null,
+      kehrbuch_order: kehrbuch_order || null,
+      zeitraum: zeitraum || null,
+      time_range: time_range || null,
       telefon: telefon || null,
       email: email || null,
       bemerkung: bemerkung || null
@@ -140,13 +172,18 @@ router.post('/import', upload.single('file'), (req, res) => {
     // Map CSV columns to our database fields
     const fieldMap = {
       'KUNDENNUMMER': 'kundennummer',
-      'NAME1': 'name',
-      'NAME2': 'vorname',
-      'NAME3': 'nachname',
+      'OBJEKT': 'name',
+      'TITELNAME': 'titelname',
+      'NAME1': 'vorname',
+      'NAME2': 'nachname',
       'STRASSE': 'strasse',
-      'HNR': 'hr',
+      'HNR': 'hnr',
       'PLZ': 'plz',
       'ORT': 'ort',
+      'ROUTE': 'route_name',
+      'KEHRBUCH': 'kehrbuch_order',
+      'ZEITRAUM': 'zeitraum',
+      'STRVONBISZEIT': 'time_range',
       'TEL1': 'telefon',
       'EMAIL': 'email',
       'INFO': 'bemerkung'
@@ -194,12 +231,17 @@ router.post('/import', upload.single('file'), (req, res) => {
         insertCustomer.run({
           kundennummer: customerData.kundennummer || null,
           name: customerData.name || '',
+          titelname: customerData.titelname || null,
           vorname: customerData.vorname || null,
           nachname: customerData.nachname || null,
           strasse: customerData.strasse || null,
-          hr: customerData.hr || null,
+          hnr: customerData.hnr || null,
           plz: customerData.plz || null,
           ort: customerData.ort || null,
+          route_name: customerData.route_name || null,
+          kehrbuch_order: customerData.kehrbuch_order ? parseInt(customerData.kehrbuch_order) : null,
+          zeitraum: customerData.zeitraum || null,
+          time_range: customerData.time_range || null,
           telefon: customerData.telefon || null,
           email: customerData.email || null,
           bemerkung: customerData.bemerkung || null
