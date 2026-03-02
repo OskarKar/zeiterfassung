@@ -518,9 +518,9 @@ function renderMitarbeiter() {
       </div>
       <div>
         <label class="block text-xs font-semibold text-gray-500 mb-1">Google Kalender iCal-URL</label>
-        <input type="url" name="calendar_ical_url" placeholder="https://calendar.google.com/calendar/ical/..."
+        <input type="url" name="calendar_ical_url" placeholder="https://calendar.google.com/calendar/ical/EMAIL/public/basic.ics"
           class="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-blue-500" />
-        <div class="text-xs text-gray-400 mt-0.5">Für Tour-Planung und Kalender-Events</div>
+        <div class="text-xs text-gray-400 mt-0.5">⚠️ Wichtig: iCal-URL verwenden (.ics), nicht Embed-URL!</div>
       </div>
       <div class="flex items-end">
         <button type="submit"
@@ -597,8 +597,9 @@ function renderMitarbeiter() {
                   <div>
                     <label class="block text-xs font-semibold text-gray-500 mb-1">Google Kalender iCal-URL</label>
                     <input type="url" name="calendar_ical_url" value="${emp.calendar_ical_url || ''}"
-                      placeholder="https://calendar.google.com/calendar/ical/..."
+                      placeholder="https://calendar.google.com/calendar/ical/EMAIL/public/basic.ics"
                       class="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-blue-500" />
+                    <div class="text-xs text-gray-400 mt-0.5">⚠️ iCal-URL (.ics), nicht Embed-URL!</div>
                   </div>
                   <div class="flex items-end gap-2">
                     <button type="submit"
@@ -2965,23 +2966,64 @@ async function handleRouteChange(e) {
   
   try {
     const customers = await api('GET', `/customers/route/${encodeURIComponent(routeName)}`);
+    
     if (customers.length === 0) {
-      routeCustomersDiv.classList.add('hidden');
+      routeCustomersList.innerHTML = '<p class="text-sm text-gray-400">Keine Kunden auf dieser Route</p>';
+      routeCustomersDiv.classList.remove('hidden');
       return;
     }
     
-    routeCustomersList.innerHTML = customers.map(c => `
-      <div class="text-xs p-2 bg-gray-50 rounded border border-gray-200">
-        <div class="font-semibold text-gray-700">${c.kehrbuch_order || '?'}. ${c.name || c.titelname || 'Unbekannt'}</div>
-        <div class="text-gray-500">${c.strasse || ''} ${c.hnr || ''}, ${c.plz || ''} ${c.ort || ''}</div>
-        ${c.time_range ? `<div class="text-gray-400 mt-1">⏰ ${c.time_range}</div>` : ''}
-      </div>
-    `).join('');
+    let html = '<div class="space-y-2">';
     
+    // Show route customers
+    html += '<div class="font-semibold text-gray-700 text-xs mb-2">📍 Route-Objekte:</div>';
+    customers.forEach(c => {
+      html += `
+        <div class="p-2 bg-gray-50 rounded-lg text-xs border border-gray-200">
+          <div class="font-semibold text-gray-800">${c.objekt || c.name || '—'}</div>
+          <div class="text-gray-600">${c.strasse || ''} ${c.hnr || ''}, ${c.plz || ''} ${c.ort || ''}</div>
+          ${c.kehrbuch_order ? `<div class="text-gray-500 mt-1">Reihenfolge: ${c.kehrbuch_order}</div>` : ''}
+        </div>
+      `;
+    });
+    
+    // Also load calendar events for the selected date
+    const dateInput = document.getElementById('f-date');
+    const date = dateInput ? dateInput.value : new Date().toISOString().slice(0, 10);
+    const employeeId = state.currentUser?.id;
+    
+    if (employeeId) {
+      try {
+        const events = await api('GET', `/calendar/employee/${employeeId}/events?date=${date}`);
+        
+        if (events.length > 0) {
+          html += '<div class="mt-4 pt-4 border-t border-gray-300">';
+          html += '<div class="font-semibold text-gray-700 text-xs mb-2">📅 Zusätzliche Kalender-Events heute:</div>';
+          events.forEach(event => {
+            html += `
+              <div class="p-2 bg-blue-50 rounded-lg text-xs border border-blue-200">
+                <div class="font-semibold text-blue-800">${event.title}</div>
+                <div class="text-blue-600 text-xs mt-1">
+                  ⏰ ${event.start_time || ''} - ${event.end_time || ''}
+                  ${event.address ? `<br>📍 ${event.address}` : ''}
+                </div>
+              </div>
+            `;
+          });
+          html += '</div>';
+        }
+      } catch (err) {
+        console.error('Failed to load calendar events:', err);
+      }
+    }
+    
+    html += '</div>';
+    routeCustomersList.innerHTML = html;
     routeCustomersDiv.classList.remove('hidden');
   } catch (err) {
     console.error('Failed to load route customers:', err);
-    routeCustomersDiv.classList.add('hidden');
+    routeCustomersList.innerHTML = `<p class="text-sm text-red-500">Fehler: ${err.message}</p>`;
+    routeCustomersDiv.classList.remove('hidden');
   }
 }
 
