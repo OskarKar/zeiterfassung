@@ -300,15 +300,65 @@ function renderErfassung() {
       </div>
     </div>
 
-    <!-- Route selection (only visible for Kehrtour) -->
-    <div id="route-selection" class="hidden">
-      <label class="block text-sm font-semibold text-gray-600 mb-1">Route auswählen</label>
-      <select id="f-route" class="w-full border-2 border-gray-200 rounded-xl px-4 py-2.5 focus:outline-none focus:border-blue-500">
-        <option value="">-- Keine Route --</option>
-      </select>
-      <div id="route-customers" class="mt-3 hidden">
-        <div class="text-xs font-semibold text-gray-500 mb-2">Objekte auf dieser Route:</div>
-        <div id="route-customers-list" class="space-y-1 max-h-48 overflow-y-auto"></div>
+    <!-- Tour/Calendar selection (only visible for Kehrtour) -->
+    <div id="kehrtour-selection" class="hidden">
+      <div class="mb-4">
+        <label class="block text-sm font-semibold text-gray-600 mb-2">Auswahl</label>
+        <div class="flex gap-3">
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input type="radio" name="kehrtour-type" value="tour" id="kehrtour-type-tour" class="w-4 h-4 accent-blue-600">
+            <span class="text-sm font-medium text-gray-700">🗺️ Tour</span>
+          </label>
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input type="radio" name="kehrtour-type" value="calendar" id="kehrtour-type-calendar" class="w-4 h-4 accent-blue-600">
+            <span class="text-sm font-medium text-gray-700">📅 Kalender</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Tour selection -->
+      <div id="tour-selection" class="hidden">
+        <label class="block text-sm font-semibold text-gray-600 mb-1">Route auswählen</label>
+        <select id="f-route" class="w-full border-2 border-gray-200 rounded-xl px-4 py-2.5 focus:outline-none focus:border-blue-500">
+          <option value="">-- Keine Route --</option>
+        </select>
+        <div id="route-customers" class="mt-3 hidden">
+          <div class="text-xs font-semibold text-gray-500 mb-2">Objekte auf dieser Route:</div>
+          <div id="route-customers-list" class="space-y-1 max-h-48 overflow-y-auto"></div>
+        </div>
+      </div>
+
+      <!-- Calendar events -->
+      <div id="calendar-selection" class="hidden">
+        <label class="block text-sm font-semibold text-gray-600 mb-1">Kalender-Events für heute</label>
+        <div id="calendar-events-list" class="space-y-2 max-h-64 overflow-y-auto">
+          <p class="text-sm text-gray-400">Lade Events...</p>
+        </div>
+      </div>
+
+      <!-- Ticket creation area -->
+      <div id="ticket-creation" class="hidden mt-4 p-4 bg-yellow-50 border-2 border-yellow-200 rounded-xl">
+        <h4 class="font-semibold text-gray-800 mb-3">🎫 Ticket erstellen</h4>
+        <div class="space-y-3">
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Ticket-Typ</label>
+            <select id="ticket-type-inline" class="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-blue-500">
+              <option value="dichtheit">Dichtheitsprüfung</option>
+              <option value="terminwunsch">Terminwunsch</option>
+              <option value="zusatzarbeit">Zusatzarbeit</option>
+              <option value="sonstiges">Sonstiges</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Notiz</label>
+            <textarea id="ticket-notiz-inline" rows="3" placeholder="Beschreibe das Problem oder die Anforderung..."
+              class="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-blue-500"></textarea>
+          </div>
+          <div class="flex items-center gap-2">
+            <input type="checkbox" id="ticket-confirmed" class="w-4 h-4 accent-blue-600">
+            <label for="ticket-confirmed" class="text-sm font-medium text-gray-700">Ticket bestätigt</label>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -466,6 +516,12 @@ function renderMitarbeiter() {
         <input type="password" name="password" placeholder="Leer = kein Passwort erforderlich"
           class="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-blue-500" />
       </div>
+      <div>
+        <label class="block text-xs font-semibold text-gray-500 mb-1">Google Kalender iCal-URL</label>
+        <input type="url" name="calendar_ical_url" placeholder="https://calendar.google.com/calendar/ical/..."
+          class="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-blue-500" />
+        <div class="text-xs text-gray-400 mt-0.5">Für Tour-Planung und Kalender-Events</div>
+      </div>
       <div class="flex items-end">
         <button type="submit"
           class="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-2.5 px-4 rounded-xl transition text-sm">
@@ -536,6 +592,12 @@ function renderMitarbeiter() {
                   <div>
                     <label class="block text-xs font-semibold text-gray-500 mb-1">Neues Passwort (leer = unverändert)</label>
                     <input type="password" name="password" placeholder="Leer lassen um Passwort zu behalten"
+                      class="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-blue-500" />
+                  </div>
+                  <div>
+                    <label class="block text-xs font-semibold text-gray-500 mb-1">Google Kalender iCal-URL</label>
+                    <input type="url" name="calendar_ical_url" value="${emp.calendar_ical_url || ''}"
+                      placeholder="https://calendar.google.com/calendar/ical/..."
                       class="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-blue-500" />
                   </div>
                   <div class="flex items-end gap-2">
@@ -923,6 +985,16 @@ function attachListeners() {
   const routeSelect = document.getElementById('f-route');
   if (routeSelect) {
     routeSelect.addEventListener('change', handleRouteChange);
+  }
+
+  // Kehrtour type toggle (Tour vs Calendar)
+  const kehrtourTypeTour = document.getElementById('kehrtour-type-tour');
+  const kehrtourTypeCalendar = document.getElementById('kehrtour-type-calendar');
+  if (kehrtourTypeTour) {
+    kehrtourTypeTour.addEventListener('change', handleKehrtourTypeChange);
+  }
+  if (kehrtourTypeCalendar) {
+    kehrtourTypeCalendar.addEventListener('change', handleKehrtourTypeChange);
   }
 
   // Settings form
@@ -2727,13 +2799,34 @@ async function handleCreateTicketFromTour(e) {
 
 async function handleCategoryChange(e) {
   const category = e.target.value;
-  const routeSelection = document.getElementById('route-selection');
-  const routeSelect = document.getElementById('f-route');
+  const kehrtourSelection = document.getElementById('kehrtour-selection');
   
-  if (!routeSelection || !routeSelect) return;
+  if (!kehrtourSelection) return;
   
   if (category === 'kehrtour') {
-    routeSelection.classList.remove('hidden');
+    kehrtourSelection.classList.remove('hidden');
+    // Reset selections
+    document.getElementById('kehrtour-type-tour')?.click();
+  } else {
+    kehrtourSelection.classList.add('hidden');
+    document.getElementById('tour-selection')?.classList.add('hidden');
+    document.getElementById('calendar-selection')?.classList.add('hidden');
+    document.getElementById('ticket-creation')?.classList.add('hidden');
+  }
+}
+
+async function handleKehrtourTypeChange(e) {
+  const type = e.target.value;
+  const tourSelection = document.getElementById('tour-selection');
+  const calendarSelection = document.getElementById('calendar-selection');
+  const routeSelect = document.getElementById('f-route');
+  
+  if (!tourSelection || !calendarSelection) return;
+  
+  if (type === 'tour') {
+    tourSelection.classList.remove('hidden');
+    calendarSelection.classList.add('hidden');
+    
     // Load available routes
     try {
       const routes = await api('GET', '/customers/routes');
@@ -2742,9 +2835,75 @@ async function handleCategoryChange(e) {
     } catch (err) {
       console.error('Failed to load routes:', err);
     }
-  } else {
-    routeSelection.classList.add('hidden');
-    document.getElementById('route-customers')?.classList.add('hidden');
+  } else if (type === 'calendar') {
+    tourSelection.classList.add('hidden');
+    calendarSelection.classList.remove('hidden');
+    
+    // Load calendar events for current user and selected date
+    await loadCalendarEventsForDate();
+  }
+}
+
+async function loadCalendarEventsForDate() {
+  const calendarEventsList = document.getElementById('calendar-events-list');
+  if (!calendarEventsList) return;
+  
+  const dateInput = document.getElementById('f-date');
+  const date = dateInput ? dateInput.value : new Date().toISOString().slice(0, 10);
+  
+  calendarEventsList.innerHTML = '<p class="text-sm text-gray-400">Lade Events...</p>';
+  
+  try {
+    const employeeId = state.currentUser?.id;
+    if (!employeeId) {
+      calendarEventsList.innerHTML = '<p class="text-sm text-red-500">Kein Mitarbeiter ausgewählt</p>';
+      return;
+    }
+    
+    const events = await api('GET', `/calendar/employee/${employeeId}/events?date=${date}`);
+    
+    if (events.length === 0) {
+      calendarEventsList.innerHTML = '<p class="text-sm text-gray-400">Keine Events für dieses Datum</p>';
+      return;
+    }
+    
+    calendarEventsList.innerHTML = events.map(event => `
+      <div class="p-3 bg-white border-2 border-gray-200 rounded-lg hover:border-blue-400 cursor-pointer transition"
+           onclick="selectCalendarEvent(${event.id}, '${event.title.replace(/'/g, "\\'")}')"
+           id="calendar-event-${event.id}">
+        <div class="font-semibold text-gray-800">${event.title}</div>
+        <div class="text-xs text-gray-500 mt-1">
+          <span>⏰ ${event.start_time || ''} - ${event.end_time || ''}</span>
+          ${event.address ? `<br><span>📍 ${event.address}</span>` : ''}
+        </div>
+      </div>
+    `).join('');
+  } catch (err) {
+    console.error('Failed to load calendar events:', err);
+    calendarEventsList.innerHTML = `<p class="text-sm text-red-500">Fehler: ${err.message}</p>`;
+  }
+}
+
+function selectCalendarEvent(eventId, eventTitle) {
+  // Highlight selected event
+  document.querySelectorAll('[id^="calendar-event-"]').forEach(el => {
+    el.classList.remove('border-blue-500', 'bg-blue-50');
+    el.classList.add('border-gray-200');
+  });
+  
+  const selectedEvent = document.getElementById(`calendar-event-${eventId}`);
+  if (selectedEvent) {
+    selectedEvent.classList.remove('border-gray-200');
+    selectedEvent.classList.add('border-blue-500', 'bg-blue-50');
+  }
+  
+  // Show ticket creation area
+  const ticketCreation = document.getElementById('ticket-creation');
+  if (ticketCreation) {
+    ticketCreation.classList.remove('hidden');
+    // Store event data for later use
+    ticketCreation.dataset.eventId = eventId;
+    ticketCreation.dataset.eventTitle = eventTitle;
   }
 }
 
