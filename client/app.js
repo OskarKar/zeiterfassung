@@ -1243,16 +1243,58 @@ async function handleSaveEntry(e) {
     return;
   }
 
+  const category = fd.get('category');
   const payload = {
     employee_id,
     date: fd.get('date'),
     start_time: fd.get('start_time') || null,
     end_time: fd.get('end_time') || null,
-    category: fd.get('category'),
+    category,
     is_outside: form.querySelector('#f-outside')?.checked ? 1 : 0,
     tip: parseFloat(fd.get('tip')) || 0,
     description: fd.get('description') || '',
   };
+
+  // Validation for Kehrtour category
+  if (category === 'kehrtour') {
+    const ticketCreation = document.getElementById('ticket-creation');
+    const ticketConfirmed = document.getElementById('ticket-confirmed');
+    
+    // Check if ticket creation area is visible (meaning tour/calendar was selected)
+    if (ticketCreation && !ticketCreation.classList.contains('hidden')) {
+      // Ticket creation is visible, check if confirmed
+      if (!ticketConfirmed?.checked) {
+        alert('Bitte bestätige das Ticket, bevor du den Eintrag speicherst.');
+        return;
+      }
+      
+      // Create ticket before saving entry
+      try {
+        const ticketType = document.getElementById('ticket-type-inline')?.value;
+        const ticketNotiz = document.getElementById('ticket-notiz-inline')?.value;
+        const eventId = ticketCreation.dataset.eventId;
+        const eventTitle = ticketCreation.dataset.eventTitle;
+        
+        const ticketPayload = {
+          employee_id,
+          ticket_type: ticketType || 'sonstiges',
+          notiz: ticketNotiz || '',
+          status: 'offen'
+        };
+        
+        // Add event/tour reference if available
+        if (eventId) {
+          ticketPayload.calendar_event_title = eventTitle;
+        }
+        
+        await api('POST', '/tickets', ticketPayload);
+        showToast('🎫 Ticket erstellt');
+      } catch (err) {
+        alert('Fehler beim Erstellen des Tickets: ' + err.message);
+        return;
+      }
+    }
+  }
 
   try {
     await api('POST', '/entries', payload);
@@ -1277,11 +1319,12 @@ async function handleAddEmployee(e) {
   const name     = nameRaw || nachname || (vorname + ' ' + nachname).trim();
   const geburtsdatum = fd.get('geburtsdatum') || '';
   const password     = fd.get('password') || '';
+  const calendar_ical_url = (fd.get('calendar_ical_url') || '').trim();
 
   if (!name) { alert('Bitte Vorname oder Nachname eingeben.'); return; }
 
   try {
-    await api('POST', '/employees', { name, vorname, nachname, geburtsdatum, is_boss: 0, password });
+    await api('POST', '/employees', { name, vorname, nachname, geburtsdatum, is_boss: 0, password, calendar_ical_url });
     state.employees = await api('GET', '/employees');
     form.reset();
     showToast('✅ Mitarbeiter angelegt');
@@ -1303,10 +1346,11 @@ async function handleUpdateEmployee(e) {
   const name         = nameRaw || nachname || (vorname + ' ' + nachname).trim();
   const geburtsdatum = fd.get('geburtsdatum') || '';
   const password     = fd.get('password') || '';
+  const calendar_ical_url = (fd.get('calendar_ical_url') || '').trim();
 
   if (!name) { alert('Bitte Anzeigename eingeben.'); return; }
 
-  const payload = { name, vorname, nachname, geburtsdatum };
+  const payload = { name, vorname, nachname, geburtsdatum, calendar_ical_url };
   if (password) payload.password = password;
 
   try {
