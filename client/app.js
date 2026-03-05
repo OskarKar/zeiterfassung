@@ -325,14 +325,14 @@ function renderErfassung() {
         
         <!-- Route customers and calendar events as cards -->
         <div id="route-customers" class="hidden">
-          <div id="route-customers-list" class="grid grid-cols-1 gap-3"></div>
+          <div id="route-customers-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2"></div>
         </div>
       </div>
 
       <!-- Calendar events as cards -->
       <div id="calendar-selection" class="hidden">
         <label class="block text-sm font-semibold text-gray-600 mb-2">Kalender-Events für heute</label>
-        <div id="calendar-events-list" class="grid grid-cols-1 gap-3">
+        <div id="calendar-events-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
           <p class="text-sm text-gray-400">Lade Events...</p>
         </div>
       </div>
@@ -972,6 +972,12 @@ function attachListeners() {
   }
   if (kehrtourTypeCalendar) {
     kehrtourTypeCalendar.addEventListener('change', handleKehrtourTypeChange);
+  }
+
+  // Date change listener - reload calendar/tour data when date changes
+  const dateInput = document.getElementById('f-date');
+  if (dateInput) {
+    dateInput.addEventListener('change', handleDateChange);
   }
 
   // Settings form
@@ -2795,6 +2801,23 @@ async function handleCategoryChange(e) {
   }
 }
 
+async function handleDateChange(e) {
+  // Reload data based on current selection (tour or calendar)
+  const tourRadio = document.getElementById('kehrtour-type-tour');
+  const calendarRadio = document.getElementById('kehrtour-type-calendar');
+  const routeSelect = document.getElementById('f-route');
+  
+  if (tourRadio?.checked) {
+    // If tour is selected and a route is chosen, reload route data
+    if (routeSelect?.value) {
+      await handleRouteChange({ target: routeSelect });
+    }
+  } else if (calendarRadio?.checked) {
+    // If calendar is selected, reload calendar events
+    await loadCalendarEventsForDate();
+  }
+}
+
 async function handleKehrtourTypeChange(e) {
   const type = e.target.value;
   const tourSelection = document.getElementById('tour-selection');
@@ -2848,21 +2871,15 @@ async function loadCalendarEventsForDate() {
     }
     
     calendarEventsList.innerHTML = events.map((event, idx) => `
-      <div class="p-4 bg-white border-2 border-gray-200 rounded-xl hover:border-blue-400 transition" id="calendar-event-${idx}">
-        <div class="flex justify-between items-start">
-          <div class="flex-1">
-            <div class="font-semibold text-gray-800">${event.title}</div>
-            <div class="text-sm text-gray-600 mt-1">
-              ⏰ ${event.start_time || ''} - ${event.end_time || ''}
-            </div>
-            ${event.address ? `<div class="text-xs text-gray-500 mt-1">📍 ${event.address}</div>` : ''}
-          </div>
-          <button type="button" onclick="openTicketModal('event', '${event.id}', '${event.title.replace(/'/g, "\\'")}')"
-            class="ml-3 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg transition">
-            🎫 Ticket
-          </button>
-        </div>
-        <div id="ticket-status-event-${event.id}" class="mt-2 hidden"></div>
+      <div class="p-2 bg-white border border-gray-300 rounded-lg hover:border-blue-500 transition" id="calendar-event-${idx}">
+        <div class="font-semibold text-gray-800 text-xs mb-1">${event.title}</div>
+        <div class="text-xs text-gray-600">⏰ ${event.start_time || ''} - ${event.end_time || ''}</div>
+        ${event.address ? `<div class="text-xs text-gray-500 mt-1">📍 ${event.address}</div>` : ''}
+        <button type="button" onclick="openTicketModal('event', '${event.id}', '${event.title.replace(/'/g, "\\'")}')"
+          class="mt-2 w-full px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded transition">
+          🎫 Ticket
+        </button>
+        <div id="ticket-status-event-${event.id}" class="mt-1 hidden"></div>
       </div>
     `).join('');
   } catch (err) {
@@ -2988,6 +3005,11 @@ async function confirmTicket() {
   }
 }
 
+// Make functions globally available
+window.openTicketModal = openTicketModal;
+window.closeTicketModal = closeTicketModal;
+window.confirmTicket = confirmTicket;
+
 async function handleRouteChange(e) {
   const routeName = e.target.value;
   const routeCustomersDiv = document.getElementById('route-customers');
@@ -3010,22 +3032,19 @@ async function handleRouteChange(e) {
     
     // Show route customers as cards
     if (customers.length > 0) {
-      html += '<div class="mb-3"><div class="font-semibold text-gray-700 text-sm mb-2">📍 Route-Objekte:</div></div>';
+      html += '<div class="mb-2"><div class="font-semibold text-gray-700 text-xs mb-2">📍 Route-Objekte:</div></div>';
       customers.forEach((c, idx) => {
         html += `
-          <div class="p-4 bg-white border-2 border-gray-200 rounded-xl hover:border-blue-400 transition" id="customer-card-${idx}">
-            <div class="flex justify-between items-start">
-              <div class="flex-1">
-                <div class="font-semibold text-gray-800">${c.objekt || c.name || '—'}</div>
-                <div class="text-sm text-gray-600 mt-1">${c.strasse || ''} ${c.hnr || ''}, ${c.plz || ''} ${c.ort || ''}</div>
-                ${c.kehrbuch_order ? `<div class="text-xs text-gray-500 mt-1">🔢 Reihenfolge: ${c.kehrbuch_order}</div>` : ''}
-              </div>
-              <button type="button" onclick="openTicketModal('customer', ${c.id}, '${(c.objekt || c.name || '').replace(/'/g, "\\'")}')"
-                class="ml-3 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg transition">
-                🎫 Ticket
-              </button>
-            </div>
-            <div id="ticket-status-customer-${c.id}" class="mt-2 hidden"></div>
+          <div class="p-2 bg-white border border-gray-300 rounded-lg hover:border-blue-500 transition" id="customer-card-${idx}">
+            <div class="font-semibold text-gray-800 text-xs mb-1">${c.objekt || c.name || '—'}</div>
+            <div class="text-xs text-gray-600">${c.strasse || ''} ${c.hnr || ''}</div>
+            <div class="text-xs text-gray-500">${c.plz || ''} ${c.ort || ''}</div>
+            ${c.kehrbuch_order ? `<div class="text-xs text-gray-500 mt-1">🔢 ${c.kehrbuch_order}</div>` : ''}
+            <button type="button" onclick="openTicketModal('customer', ${c.id}, '${(c.objekt || c.name || '').replace(/'/g, "\\'")}')"
+              class="mt-2 w-full px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded transition">
+              🎫 Ticket
+            </button>
+            <div id="ticket-status-customer-${c.id}" class="mt-1 hidden"></div>
           </div>
         `;
       });
@@ -3037,24 +3056,18 @@ async function handleRouteChange(e) {
         const events = await api('GET', `/calendar/employee/${employeeId}/events?date=${date}`);
         
         if (events.length > 0) {
-          html += '<div class="mt-4 mb-3"><div class="font-semibold text-gray-700 text-sm mb-2">📅 Zusätzliche Kalender-Events heute:</div></div>';
+          html += '<div class="mt-3 mb-2"><div class="font-semibold text-gray-700 text-xs mb-2">📅 Zusätzliche Kalender-Events:</div></div>';
           events.forEach((event, idx) => {
             html += `
-              <div class="p-4 bg-blue-50 border-2 border-blue-200 rounded-xl hover:border-blue-500 transition" id="event-card-${idx}">
-                <div class="flex justify-between items-start">
-                  <div class="flex-1">
-                    <div class="font-semibold text-blue-900">${event.title}</div>
-                    <div class="text-sm text-blue-700 mt-1">
-                      ⏰ ${event.start_time || ''} - ${event.end_time || ''}
-                    </div>
-                    ${event.address ? `<div class="text-xs text-blue-600 mt-1">📍 ${event.address}</div>` : ''}
-                  </div>
-                  <button type="button" onclick="openTicketModal('event', '${event.id}', '${event.title.replace(/'/g, "\\'")}')"
-                    class="ml-3 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg transition">
-                    🎫 Ticket
-                  </button>
-                </div>
-                <div id="ticket-status-event-${event.id}" class="mt-2 hidden"></div>
+              <div class="p-2 bg-blue-50 border border-blue-300 rounded-lg hover:border-blue-500 transition" id="event-card-${idx}">
+                <div class="font-semibold text-blue-900 text-xs mb-1">${event.title}</div>
+                <div class="text-xs text-blue-700">⏰ ${event.start_time || ''} - ${event.end_time || ''}</div>
+                ${event.address ? `<div class="text-xs text-blue-600 mt-1">📍 ${event.address}</div>` : ''}
+                <button type="button" onclick="openTicketModal('event', '${event.id}', '${event.title.replace(/'/g, "\\'")}')"
+                  class="mt-2 w-full px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded transition">
+                  🎫 Ticket
+                </button>
+                <div id="ticket-status-event-${event.id}" class="mt-1 hidden"></div>
               </div>
             `;
           });
