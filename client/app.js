@@ -306,7 +306,7 @@ function renderErfassung() {
         <label class="block text-sm font-semibold text-gray-600 mb-2">Auswahl</label>
         <div class="flex gap-3">
           <label class="flex items-center gap-2 cursor-pointer">
-            <input type="radio" name="kehrtour-type" value="tour" id="kehrtour-type-tour" class="w-4 h-4 accent-blue-600">
+            <input type="radio" name="kehrtour-type" value="tour" id="kehrtour-type-tour" class="w-4 h-4 accent-blue-600" checked>
             <span class="text-sm font-medium text-gray-700">🗺️ Tour</span>
           </label>
           <label class="flex items-center gap-2 cursor-pointer">
@@ -317,47 +317,23 @@ function renderErfassung() {
       </div>
 
       <!-- Tour selection -->
-      <div id="tour-selection" class="hidden">
+      <div id="tour-selection">
         <label class="block text-sm font-semibold text-gray-600 mb-1">Route auswählen</label>
-        <select id="f-route" class="w-full border-2 border-gray-200 rounded-xl px-4 py-2.5 focus:outline-none focus:border-blue-500">
+        <select id="f-route" class="w-full border-2 border-gray-200 rounded-xl px-4 py-2.5 focus:outline-none focus:border-blue-500 mb-3">
           <option value="">-- Keine Route --</option>
         </select>
-        <div id="route-customers" class="mt-3 hidden">
-          <div class="text-xs font-semibold text-gray-500 mb-2">Objekte auf dieser Route:</div>
-          <div id="route-customers-list" class="space-y-1 max-h-48 overflow-y-auto"></div>
+        
+        <!-- Route customers and calendar events as cards -->
+        <div id="route-customers" class="hidden">
+          <div id="route-customers-list" class="grid grid-cols-1 gap-3"></div>
         </div>
       </div>
 
-      <!-- Calendar events -->
+      <!-- Calendar events as cards -->
       <div id="calendar-selection" class="hidden">
-        <label class="block text-sm font-semibold text-gray-600 mb-1">Kalender-Events für heute</label>
-        <div id="calendar-events-list" class="space-y-2 max-h-64 overflow-y-auto">
+        <label class="block text-sm font-semibold text-gray-600 mb-2">Kalender-Events für heute</label>
+        <div id="calendar-events-list" class="grid grid-cols-1 gap-3">
           <p class="text-sm text-gray-400">Lade Events...</p>
-        </div>
-      </div>
-
-      <!-- Ticket creation area -->
-      <div id="ticket-creation" class="hidden mt-4 p-4 bg-yellow-50 border-2 border-yellow-200 rounded-xl">
-        <h4 class="font-semibold text-gray-800 mb-3">🎫 Ticket erstellen</h4>
-        <div class="space-y-3">
-          <div>
-            <label class="block text-xs font-semibold text-gray-600 mb-1">Ticket-Typ</label>
-            <select id="ticket-type-inline" class="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-blue-500">
-              <option value="dichtheit">Dichtheitsprüfung</option>
-              <option value="terminwunsch">Terminwunsch</option>
-              <option value="zusatzarbeit">Zusatzarbeit</option>
-              <option value="sonstiges">Sonstiges</option>
-            </select>
-          </div>
-          <div>
-            <label class="block text-xs font-semibold text-gray-600 mb-1">Notiz</label>
-            <textarea id="ticket-notiz-inline" rows="3" placeholder="Beschreibe das Problem oder die Anforderung..."
-              class="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-blue-500"></textarea>
-          </div>
-          <div class="flex items-center gap-2">
-            <input type="checkbox" id="ticket-confirmed" class="w-4 h-4 accent-blue-600">
-            <label for="ticket-confirmed" class="text-sm font-medium text-gray-700">Ticket bestätigt</label>
-          </div>
         </div>
       </div>
     </div>
@@ -1255,47 +1231,6 @@ async function handleSaveEntry(e) {
     tip: parseFloat(fd.get('tip')) || 0,
     description: fd.get('description') || '',
   };
-
-  // Validation for Kehrtour category
-  if (category === 'kehrtour') {
-    const ticketCreation = document.getElementById('ticket-creation');
-    const ticketConfirmed = document.getElementById('ticket-confirmed');
-    
-    // Check if ticket creation area is visible (meaning tour/calendar was selected)
-    if (ticketCreation && !ticketCreation.classList.contains('hidden')) {
-      // Ticket creation is visible, check if confirmed
-      if (!ticketConfirmed?.checked) {
-        alert('Bitte bestätige das Ticket, bevor du den Eintrag speicherst.');
-        return;
-      }
-      
-      // Create ticket before saving entry
-      try {
-        const ticketType = document.getElementById('ticket-type-inline')?.value;
-        const ticketNotiz = document.getElementById('ticket-notiz-inline')?.value;
-        const eventId = ticketCreation.dataset.eventId;
-        const eventTitle = ticketCreation.dataset.eventTitle;
-        
-        const ticketPayload = {
-          employee_id,
-          ticket_type: ticketType || 'sonstiges',
-          notiz: ticketNotiz || '',
-          status: 'offen'
-        };
-        
-        // Add event/tour reference if available
-        if (eventId) {
-          ticketPayload.calendar_event_title = eventTitle;
-        }
-        
-        await api('POST', '/tickets', ticketPayload);
-        showToast('🎫 Ticket erstellt');
-      } catch (err) {
-        alert('Fehler beim Erstellen des Tickets: ' + err.message);
-        return;
-      }
-    }
-  }
 
   try {
     await api('POST', '/entries', payload);
@@ -2912,15 +2847,22 @@ async function loadCalendarEventsForDate() {
       return;
     }
     
-    calendarEventsList.innerHTML = events.map(event => `
-      <div class="p-3 bg-white border-2 border-gray-200 rounded-lg hover:border-blue-400 cursor-pointer transition"
-           onclick="selectCalendarEvent(${event.id}, '${event.title.replace(/'/g, "\\'")}')"
-           id="calendar-event-${event.id}">
-        <div class="font-semibold text-gray-800">${event.title}</div>
-        <div class="text-xs text-gray-500 mt-1">
-          <span>⏰ ${event.start_time || ''} - ${event.end_time || ''}</span>
-          ${event.address ? `<br><span>📍 ${event.address}</span>` : ''}
+    calendarEventsList.innerHTML = events.map((event, idx) => `
+      <div class="p-4 bg-white border-2 border-gray-200 rounded-xl hover:border-blue-400 transition" id="calendar-event-${idx}">
+        <div class="flex justify-between items-start">
+          <div class="flex-1">
+            <div class="font-semibold text-gray-800">${event.title}</div>
+            <div class="text-sm text-gray-600 mt-1">
+              ⏰ ${event.start_time || ''} - ${event.end_time || ''}
+            </div>
+            ${event.address ? `<div class="text-xs text-gray-500 mt-1">📍 ${event.address}</div>` : ''}
+          </div>
+          <button type="button" onclick="openTicketModal('event', '${event.id}', '${event.title.replace(/'/g, "\\'")}')"
+            class="ml-3 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg transition">
+            🎫 Ticket
+          </button>
         </div>
+        <div id="ticket-status-event-${event.id}" class="mt-2 hidden"></div>
       </div>
     `).join('');
   } catch (err) {
@@ -2929,26 +2871,120 @@ async function loadCalendarEventsForDate() {
   }
 }
 
-function selectCalendarEvent(eventId, eventTitle) {
-  // Highlight selected event
-  document.querySelectorAll('[id^="calendar-event-"]').forEach(el => {
-    el.classList.remove('border-blue-500', 'bg-blue-50');
-    el.classList.add('border-gray-200');
-  });
+// Global ticket state
+window.currentTicketContext = null;
+
+function openTicketModal(type, id, title) {
+  window.currentTicketContext = { type, id, title };
   
-  const selectedEvent = document.getElementById(`calendar-event-${eventId}`);
-  if (selectedEvent) {
-    selectedEvent.classList.remove('border-gray-200');
-    selectedEvent.classList.add('border-blue-500', 'bg-blue-50');
+  const modal = document.createElement('div');
+  modal.id = 'inline-ticket-modal';
+  modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
+  modal.innerHTML = `
+    <div class="bg-white rounded-2xl p-6 max-w-md w-full mx-4 shadow-2xl">
+      <h3 class="text-lg font-bold text-gray-800 mb-4">🎫 Ticket erstellen</h3>
+      <div class="mb-3">
+        <div class="text-sm font-semibold text-gray-600 mb-1">Für:</div>
+        <div class="text-sm text-gray-800 bg-gray-50 p-2 rounded-lg">${title}</div>
+      </div>
+      
+      <div class="mb-4">
+        <label class="block text-sm font-semibold text-gray-700 mb-2">Was ist zu tun?</label>
+        <div class="space-y-2">
+          <label class="flex items-center gap-2 p-3 border-2 border-gray-200 rounded-lg cursor-pointer hover:bg-blue-50 hover:border-blue-400 transition">
+            <input type="radio" name="ticket-type" value="mangel" class="w-4 h-4 accent-blue-600">
+            <span class="text-sm font-medium">⚠️ Mangel / Beanstandung</span>
+          </label>
+          <label class="flex items-center gap-2 p-3 border-2 border-gray-200 rounded-lg cursor-pointer hover:bg-blue-50 hover:border-blue-400 transition">
+            <input type="radio" name="ticket-type" value="dichtpruefung" class="w-4 h-4 accent-blue-600">
+            <span class="text-sm font-medium">🔍 Dichtheitsprüfung gemacht</span>
+          </label>
+          <label class="flex items-center gap-2 p-3 border-2 border-gray-200 rounded-lg cursor-pointer hover:bg-blue-50 hover:border-blue-400 transition">
+            <input type="radio" name="ticket-type" value="neue_heizung" class="w-4 h-4 accent-blue-600">
+            <span class="text-sm font-medium">🔥 Neue Heizung / Sanierung</span>
+          </label>
+          <label class="flex items-center gap-2 p-3 border-2 border-gray-200 rounded-lg cursor-pointer hover:bg-blue-50 hover:border-blue-400 transition">
+            <input type="radio" name="ticket-type" value="terminwunsch" class="w-4 h-4 accent-blue-600">
+            <span class="text-sm font-medium">📅 Terminwunsch</span>
+          </label>
+          <label class="flex items-center gap-2 p-3 border-2 border-gray-200 rounded-lg cursor-pointer hover:bg-blue-50 hover:border-blue-400 transition">
+            <input type="radio" name="ticket-type" value="zusatzarbeit" class="w-4 h-4 accent-blue-600">
+            <span class="text-sm font-medium">🛠️ Zusatzarbeit</span>
+          </label>
+          <label class="flex items-center gap-2 p-3 border-2 border-gray-200 rounded-lg cursor-pointer hover:bg-blue-50 hover:border-blue-400 transition">
+            <input type="radio" name="ticket-type" value="sonstiges" class="w-4 h-4 accent-blue-600">
+            <span class="text-sm font-medium">📝 Sonstiges</span>
+          </label>
+        </div>
+      </div>
+      
+      <div class="mb-4">
+        <label class="block text-sm font-semibold text-gray-700 mb-1">Notiz (optional)</label>
+        <textarea id="inline-ticket-notiz" rows="3" placeholder="Weitere Details..."
+          class="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"></textarea>
+      </div>
+      
+      <div class="flex gap-3">
+        <button onclick="closeTicketModal()" type="button"
+          class="flex-1 px-4 py-2.5 bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold rounded-lg transition">
+          Abbrechen
+        </button>
+        <button onclick="confirmTicket()" type="button"
+          class="flex-1 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition">
+          ✅ Bestätigen
+        </button>
+      </div>
+    </div>
+  `;
+  
+  document.body.appendChild(modal);
+}
+
+function closeTicketModal() {
+  const modal = document.getElementById('inline-ticket-modal');
+  if (modal) modal.remove();
+  window.currentTicketContext = null;
+}
+
+async function confirmTicket() {
+  const selectedType = document.querySelector('input[name="ticket-type"]:checked');
+  if (!selectedType) {
+    alert('Bitte wähle einen Ticket-Typ aus.');
+    return;
   }
   
-  // Show ticket creation area
-  const ticketCreation = document.getElementById('ticket-creation');
-  if (ticketCreation) {
-    ticketCreation.classList.remove('hidden');
-    // Store event data for later use
-    ticketCreation.dataset.eventId = eventId;
-    ticketCreation.dataset.eventTitle = eventTitle;
+  const notiz = document.getElementById('inline-ticket-notiz')?.value || '';
+  const context = window.currentTicketContext;
+  
+  if (!context) return;
+  
+  try {
+    const ticketPayload = {
+      employee_id: state.currentUser.id,
+      ticket_type: selectedType.value,
+      notiz: notiz,
+      status: 'offen'
+    };
+    
+    if (context.type === 'customer') {
+      ticketPayload.customer_id = context.id;
+    } else if (context.type === 'event') {
+      ticketPayload.calendar_event_title = context.title;
+    }
+    
+    await api('POST', '/tickets', ticketPayload);
+    
+    // Show success message in the card
+    const statusDiv = document.getElementById(`ticket-status-${context.type}-${context.id}`);
+    if (statusDiv) {
+      statusDiv.classList.remove('hidden');
+      statusDiv.innerHTML = '<div class="p-2 bg-green-100 border border-green-300 rounded-lg text-xs text-green-800 font-semibold">✅ Ticket erstellt!</div>';
+    }
+    
+    showToast('🎫 Ticket erfolgreich erstellt!');
+    closeTicketModal();
+  } catch (err) {
+    alert('Fehler beim Erstellen des Tickets: ' + err.message);
   }
 }
 
@@ -2966,58 +3002,72 @@ async function handleRouteChange(e) {
   
   try {
     const customers = await api('GET', `/customers/route/${encodeURIComponent(routeName)}`);
-    
-    if (customers.length === 0) {
-      routeCustomersList.innerHTML = '<p class="text-sm text-gray-400">Keine Kunden auf dieser Route</p>';
-      routeCustomersDiv.classList.remove('hidden');
-      return;
-    }
-    
-    let html = '<div class="space-y-2">';
-    
-    // Show route customers
-    html += '<div class="font-semibold text-gray-700 text-xs mb-2">📍 Route-Objekte:</div>';
-    customers.forEach(c => {
-      html += `
-        <div class="p-2 bg-gray-50 rounded-lg text-xs border border-gray-200">
-          <div class="font-semibold text-gray-800">${c.objekt || c.name || '—'}</div>
-          <div class="text-gray-600">${c.strasse || ''} ${c.hnr || ''}, ${c.plz || ''} ${c.ort || ''}</div>
-          ${c.kehrbuch_order ? `<div class="text-gray-500 mt-1">Reihenfolge: ${c.kehrbuch_order}</div>` : ''}
-        </div>
-      `;
-    });
-    
-    // Also load calendar events for the selected date
     const dateInput = document.getElementById('f-date');
     const date = dateInput ? dateInput.value : new Date().toISOString().slice(0, 10);
     const employeeId = state.currentUser?.id;
     
+    let html = '';
+    
+    // Show route customers as cards
+    if (customers.length > 0) {
+      html += '<div class="mb-3"><div class="font-semibold text-gray-700 text-sm mb-2">📍 Route-Objekte:</div></div>';
+      customers.forEach((c, idx) => {
+        html += `
+          <div class="p-4 bg-white border-2 border-gray-200 rounded-xl hover:border-blue-400 transition" id="customer-card-${idx}">
+            <div class="flex justify-between items-start">
+              <div class="flex-1">
+                <div class="font-semibold text-gray-800">${c.objekt || c.name || '—'}</div>
+                <div class="text-sm text-gray-600 mt-1">${c.strasse || ''} ${c.hnr || ''}, ${c.plz || ''} ${c.ort || ''}</div>
+                ${c.kehrbuch_order ? `<div class="text-xs text-gray-500 mt-1">🔢 Reihenfolge: ${c.kehrbuch_order}</div>` : ''}
+              </div>
+              <button type="button" onclick="openTicketModal('customer', ${c.id}, '${(c.objekt || c.name || '').replace(/'/g, "\\'")}')"
+                class="ml-3 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg transition">
+                🎫 Ticket
+              </button>
+            </div>
+            <div id="ticket-status-customer-${c.id}" class="mt-2 hidden"></div>
+          </div>
+        `;
+      });
+    }
+    
+    // Also load calendar events for the selected date
     if (employeeId) {
       try {
         const events = await api('GET', `/calendar/employee/${employeeId}/events?date=${date}`);
         
         if (events.length > 0) {
-          html += '<div class="mt-4 pt-4 border-t border-gray-300">';
-          html += '<div class="font-semibold text-gray-700 text-xs mb-2">📅 Zusätzliche Kalender-Events heute:</div>';
-          events.forEach(event => {
+          html += '<div class="mt-4 mb-3"><div class="font-semibold text-gray-700 text-sm mb-2">📅 Zusätzliche Kalender-Events heute:</div></div>';
+          events.forEach((event, idx) => {
             html += `
-              <div class="p-2 bg-blue-50 rounded-lg text-xs border border-blue-200">
-                <div class="font-semibold text-blue-800">${event.title}</div>
-                <div class="text-blue-600 text-xs mt-1">
-                  ⏰ ${event.start_time || ''} - ${event.end_time || ''}
-                  ${event.address ? `<br>📍 ${event.address}` : ''}
+              <div class="p-4 bg-blue-50 border-2 border-blue-200 rounded-xl hover:border-blue-500 transition" id="event-card-${idx}">
+                <div class="flex justify-between items-start">
+                  <div class="flex-1">
+                    <div class="font-semibold text-blue-900">${event.title}</div>
+                    <div class="text-sm text-blue-700 mt-1">
+                      ⏰ ${event.start_time || ''} - ${event.end_time || ''}
+                    </div>
+                    ${event.address ? `<div class="text-xs text-blue-600 mt-1">📍 ${event.address}</div>` : ''}
+                  </div>
+                  <button type="button" onclick="openTicketModal('event', '${event.id}', '${event.title.replace(/'/g, "\\'")}')"
+                    class="ml-3 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg transition">
+                    🎫 Ticket
+                  </button>
                 </div>
+                <div id="ticket-status-event-${event.id}" class="mt-2 hidden"></div>
               </div>
             `;
           });
-          html += '</div>';
         }
       } catch (err) {
         console.error('Failed to load calendar events:', err);
       }
     }
     
-    html += '</div>';
+    if (!html) {
+      html = '<p class="text-sm text-gray-400">Keine Objekte auf dieser Route</p>';
+    }
+    
     routeCustomersList.innerHTML = html;
     routeCustomersDiv.classList.remove('hidden');
   } catch (err) {
