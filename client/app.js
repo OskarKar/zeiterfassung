@@ -323,17 +323,60 @@ function renderErfassung() {
           <option value="">-- Keine Route --</option>
         </select>
         
-        <!-- Route customers and calendar events as cards -->
+        <!-- Timeline layout: route stops left, calendar events right -->
         <div id="route-customers" class="hidden">
-          <div id="route-customers-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2"></div>
+          <!-- Stats bar -->
+          <div id="route-stats-bar" class="mb-3 p-2 bg-slate-50 border border-slate-200 rounded-lg flex items-center gap-4 text-xs">
+            <span class="text-slate-500">Stopps: <strong id="stat-total" class="text-slate-800">0</strong></span>
+            <span class="text-emerald-600">Erledigt: <strong id="stat-done">0</strong></span>
+            <div class="flex-1 bg-slate-200 h-1.5 rounded-full overflow-hidden">
+              <div id="stat-progress" class="bg-emerald-500 h-full rounded-full transition-all" style="width:0%"></div>
+            </div>
+            <span id="stat-next-date" class="text-green-700 font-semibold ml-auto"></span>
+          </div>
+          <!-- Two-column: timeline left, calendar events right -->
+          <div class="flex gap-3">
+            <!-- Route timeline -->
+            <div class="flex-1 relative">
+              <div class="absolute left-[22px] top-4 bottom-4 w-0.5 bg-slate-200" style="z-index:0"></div>
+              <div id="route-customers-list" class="space-y-2"></div>
+            </div>
+            <!-- Calendar events column -->
+            <div id="route-calendar-events-col" class="w-48 shrink-0 hidden">
+              <div class="text-xs font-semibold text-blue-600 mb-2">📅 Heute zusätzlich:</div>
+              <div id="route-calendar-events-list" class="space-y-2"></div>
+            </div>
+          </div>
+          <!-- Next Kehrtermin footer -->
+          <div id="next-kehrtermin-bar" class="mt-3 p-2 bg-green-50 border-2 border-green-300 rounded-lg hidden">
+            <div class="flex items-center gap-2">
+              <span>📅</span>
+              <div>
+                <div class="text-xs font-semibold text-green-800">Nächster Kehrtermin:</div>
+                <div id="next-kehrtermin-info" class="text-sm font-bold text-green-900"></div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
-      <!-- Calendar events as cards -->
+      <!-- Calendar-only mode -->
       <div id="calendar-selection" class="hidden">
         <label class="block text-sm font-semibold text-gray-600 mb-2">Kalender-Events für heute</label>
-        <div id="calendar-events-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-          <p class="text-sm text-gray-400">Lade Events...</p>
+        <div class="relative">
+          <div class="absolute left-[22px] top-4 bottom-4 w-0.5 bg-slate-200" style="z-index:0"></div>
+          <div id="calendar-events-list" class="space-y-2">
+            <p class="text-sm text-gray-400">Lade Events...</p>
+          </div>
+        </div>
+        <div id="next-kehrtermin-bar-calendar" class="mt-3 p-2 bg-green-50 border-2 border-green-300 rounded-lg hidden">
+          <div class="flex items-center gap-2">
+            <span>📅</span>
+            <div>
+              <div class="text-xs font-semibold text-green-800">Nächster Kehrtermin:</div>
+              <div id="next-kehrtermin-info-calendar" class="text-sm font-bold text-green-900"></div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -2880,19 +2923,43 @@ async function loadCalendarEventsForDate() {
     }
     
     calendarEventsList.innerHTML = events.map((event, idx) => `
-      <div class="p-1.5 bg-white border border-gray-300 rounded hover:border-blue-500 transition" id="calendar-event-${idx}">
-        <div class="flex items-center justify-between mb-1">
-          <div class="text-sm font-bold text-blue-700">⏰ ${event.start_time || ''}</div>
+      <div class="relative ml-9" id="calendar-event-${idx}">
+        <div class="absolute -left-9 top-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-blue-500 border-2 border-blue-300 z-10"></div>
+        <div class="flex items-center gap-3 p-2.5 bg-blue-50 border border-blue-200 rounded-lg shadow-sm hover:border-blue-400 transition">
+          <div class="flex flex-col items-center min-w-[48px] border-r border-blue-200 pr-3">
+            <span class="text-xs font-bold text-blue-700">${event.start_time || ''}</span>
+          </div>
+          <div class="flex-1 min-w-0">
+            <div class="font-bold text-sm text-blue-900">${event.title}</div>
+            ${event.address ? `<div class="text-[10px] text-blue-600 truncate">${event.address}</div>` : ''}
+          </div>
+          <button type="button" onclick="openTicketModal('event', '${event.id}', '${event.title.replace(/'/g, "\\'")}')"
+            class="flex-shrink-0 p-1.5 text-blue-400 hover:text-blue-700 hover:bg-blue-100 rounded-full transition">
+            🎫
+          </button>
         </div>
-        <div class="font-semibold text-gray-800 text-xs leading-tight mb-0.5">${event.title}</div>
-        ${event.address ? `<div class="text-xs text-gray-600 leading-tight">${event.address}</div>` : ''}
-        <button type="button" onclick="openTicketModal('event', '${event.id}', '${event.title.replace(/'/g, "\\'")}')"
-          class="mt-1.5 w-full px-1.5 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded transition">
-          🎫
-        </button>
-        <div id="ticket-status-event-${event.id}" class="mt-1 hidden"></div>
+        <div id="ticket-status-event-${event.id}" class="hidden mt-1 ml-1 text-[10px] text-emerald-700 font-semibold">✅ Ticket erstellt</div>
       </div>
     `).join('');
+    
+    // Calculate and display next Kehrtermin for calendar view
+    const nextKehrterminBar = document.getElementById('next-kehrtermin-bar-calendar');
+    const nextKehrterminInfo = document.getElementById('next-kehrtermin-info-calendar');
+    if (nextKehrterminBar && nextKehrterminInfo) {
+      const currentDate = new Date(date);
+      const nextDate = new Date(currentDate);
+      nextDate.setDate(nextDate.getDate() + 7); // Assume weekly for now
+      
+      const formattedDate = nextDate.toLocaleDateString('de-DE', { 
+        weekday: 'long', 
+        year: 'numeric', 
+        month: 'long', 
+        day: 'numeric' 
+      });
+      
+      nextKehrterminInfo.textContent = formattedDate;
+      nextKehrterminBar.classList.remove('hidden');
+    }
   } catch (err) {
     console.error('Failed to load calendar events:', err);
     calendarEventsList.innerHTML = `<p class="text-sm text-red-500">Fehler: ${err.message}</p>`;
@@ -3021,6 +3088,39 @@ window.openTicketModal = openTicketModal;
 window.closeTicketModal = closeTicketModal;
 window.confirmTicket = confirmTicket;
 
+function toggleStopDone(container, customerId) {
+  const dot = document.getElementById(`dot-${customerId}`);
+  const card = document.getElementById(`stop-card-${customerId}`);
+  const isDone = dot?.classList.contains('bg-emerald-500');
+  
+  if (isDone) {
+    // Un-mark as done
+    dot?.classList.remove('bg-emerald-500', 'border-emerald-500');
+    dot?.classList.add('bg-white', 'border-slate-300');
+    card?.classList.remove('bg-emerald-50', 'border-emerald-200');
+    card?.classList.add('bg-white', 'border-slate-200');
+  } else {
+    // Mark as done
+    dot?.classList.remove('bg-white', 'border-slate-300');
+    dot?.classList.add('bg-emerald-500', 'border-emerald-500');
+    card?.classList.remove('bg-white', 'border-slate-200');
+    card?.classList.add('bg-emerald-50', 'border-emerald-200');
+  }
+  
+  // Update stats bar
+  const allDots = document.querySelectorAll('[id^="dot-"]');
+  const doneDots = document.querySelectorAll('[id^="dot-"].bg-emerald-500');
+  const total = allDots.length;
+  const done = doneDots.length;
+  const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+  
+  const statDone = document.getElementById('stat-done');
+  const statProgress = document.getElementById('stat-progress');
+  if (statDone) statDone.textContent = done;
+  if (statProgress) statProgress.style.width = `${pct}%`;
+}
+window.toggleStopDone = toggleStopDone;
+
 async function handleRouteChange(e) {
   const routeName = e.target.value;
   const routeCustomersDiv = document.getElementById('route-customers');
@@ -3041,21 +3141,52 @@ async function handleRouteChange(e) {
     
     let html = '';
     
-    // Show route customers as cards
+    // Render route customers as timeline stops
     if (customers.length > 0) {
+      const totalStops = customers.length;
+      // Update stats bar
+      const statTotal = document.getElementById('stat-total');
+      const statDone = document.getElementById('stat-done');
+      const statProgress = document.getElementById('stat-progress');
+      if (statTotal) statTotal.textContent = totalStops;
+      if (statDone) statDone.textContent = '0';
+      if (statProgress) statProgress.style.width = '0%';
+      
       customers.forEach((c, idx) => {
+        const customerNumber = c.kundennummer || '';
+        const displayName = c.objekt || c.name || '—';
+        const address = `${c.strasse || ''} ${c.hnr || ''}`.trim();
+        const order = c.kehrbuch_order || (idx + 1);
+        const num = idx + 1;
+        
         html += `
-          <div class="p-1.5 bg-white border border-gray-300 rounded hover:border-blue-500 transition" id="customer-card-${idx}">
-            <div class="flex items-center justify-between mb-1">
-              ${c.kehrbuch_order ? `<div class="text-lg font-bold text-blue-600">#${c.kehrbuch_order}</div>` : '<div></div>'}
+          <div class="relative ml-9 group cursor-pointer" id="customer-card-${idx}"
+               onclick="toggleStopDone(this, ${c.id})">
+            <!-- Timeline dot -->
+            <div class="absolute -left-9 top-1/2 -translate-y-1/2 w-4 h-4 rounded-full border-2 bg-white border-slate-300 group-hover:border-blue-400 transition z-10"
+                 id="dot-${c.id}"></div>
+            <div class="flex items-center gap-3 p-2.5 bg-white border border-slate-200 rounded-lg shadow-sm hover:border-blue-300 hover:shadow-md transition-all"
+                 id="stop-card-${c.id}">
+              <!-- Number + Time column -->
+              <div class="flex flex-col items-center min-w-[40px] border-r border-slate-200 pr-3">
+                <span class="text-[10px] font-bold text-slate-400">#${order}</span>
+              </div>
+              <!-- Main content -->
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center justify-between">
+                  <span class="font-bold text-sm text-slate-900">${customerNumber}</span>
+                </div>
+                <div class="text-xs text-slate-600 truncate">${displayName}</div>
+                ${address ? `<div class="text-[10px] text-slate-400 truncate">${address}</div>` : ''}
+              </div>
+              <!-- Ticket button -->
+              <button type="button"
+                onclick="event.stopPropagation(); openTicketModal('customer', ${c.id}, '${displayName.replace(/'/g, "\\'")}')"
+                class="flex-shrink-0 p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-full transition">
+                🎫
+              </button>
             </div>
-            <div class="font-semibold text-gray-800 text-xs leading-tight mb-0.5">${c.objekt || c.name || '—'}</div>
-            <div class="text-xs text-gray-600 leading-tight">${c.strasse || ''} ${c.hnr || ''}</div>
-            <button type="button" onclick="openTicketModal('customer', ${c.id}, '${(c.objekt || c.name || '').replace(/'/g, "\\'")}')"
-              class="mt-1.5 w-full px-1.5 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded transition">
-              🎫
-            </button>
-            <div id="ticket-status-customer-${c.id}" class="mt-1 hidden"></div>
+            <div id="ticket-status-customer-${c.id}" class="hidden mt-1 ml-1 text-[10px] text-emerald-700 font-semibold">✅ Ticket erstellt</div>
           </div>
         `;
       });
@@ -3067,23 +3198,31 @@ async function handleRouteChange(e) {
         const events = await api('GET', `/calendar/employee/${employeeId}/events?date=${date}`);
         
         if (events.length > 0) {
-          html += '<div class="col-span-full mt-2 mb-1"><div class="font-semibold text-gray-700 text-xs">📅 Zusätzliche Events:</div></div>';
-          events.forEach((event, idx) => {
-            html += `
-              <div class="p-1.5 bg-blue-50 border border-blue-300 rounded hover:border-blue-500 transition" id="event-card-${idx}">
-                <div class="flex items-center justify-between mb-1">
-                  <div class="text-sm font-bold text-blue-700">⏰ ${event.start_time || ''}</div>
+          // Render calendar events into the right column
+          const calEventsCol = document.getElementById('route-calendar-events-col');
+          const calEventsList = document.getElementById('route-calendar-events-list');
+          if (calEventsCol && calEventsList) {
+            let evHtml = '';
+            events.forEach((event, idx) => {
+              evHtml += `
+                <div class="relative ml-6 group" id="event-card-${idx}">
+                  <div class="absolute -left-6 top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-blue-500 border-2 border-blue-300 z-10"></div>
+                  <div class="p-2 bg-blue-50 border border-blue-300 rounded-lg shadow-sm hover:border-blue-500 transition">
+                    <div class="text-[10px] font-bold text-blue-700 mb-0.5">⏰ ${event.start_time || ''}</div>
+                    <div class="font-semibold text-blue-900 text-xs leading-tight">${event.title}</div>
+                    ${event.address ? `<div class="text-[10px] text-blue-600 truncate mt-0.5">${event.address}</div>` : ''}
+                    <button type="button" onclick="openTicketModal('event', '${event.id}', '${event.title.replace(/'/g, "\\'")}')"
+                      class="mt-1.5 w-full px-1.5 py-0.5 bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-semibold rounded transition">
+                      🎫 Ticket
+                    </button>
+                    <div id="ticket-status-event-${event.id}" class="hidden mt-1 text-[10px] text-emerald-700 font-semibold">✅</div>
+                  </div>
                 </div>
-                <div class="font-semibold text-blue-900 text-xs leading-tight mb-0.5">${event.title}</div>
-                ${event.address ? `<div class="text-xs text-blue-600 leading-tight">${event.address}</div>` : ''}
-                <button type="button" onclick="openTicketModal('event', '${event.id}', '${event.title.replace(/'/g, "\\'")}')"
-                  class="mt-1.5 w-full px-1.5 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded transition">
-                  🎫
-                </button>
-                <div id="ticket-status-event-${event.id}" class="mt-1 hidden"></div>
-              </div>
-            `;
-          });
+              `;
+            });
+            calEventsList.innerHTML = evHtml;
+            calEventsCol.classList.remove('hidden');
+          }
         }
       } catch (err) {
         console.error('Failed to load calendar events:', err);
@@ -3096,6 +3235,25 @@ async function handleRouteChange(e) {
     
     routeCustomersList.innerHTML = html;
     routeCustomersDiv.classList.remove('hidden');
+    
+    // Calculate and display next Kehrtermin
+    const nextKehrterminBar = document.getElementById('next-kehrtermin-bar');
+    const nextKehrterminInfo = document.getElementById('next-kehrtermin-info');
+    if (nextKehrterminBar && nextKehrterminInfo) {
+      const currentDate = new Date(date);
+      const nextDate = new Date(currentDate);
+      nextDate.setDate(nextDate.getDate() + 7); // Assume weekly for now
+      
+      const formattedDate = nextDate.toLocaleDateString('de-DE', { 
+        weekday: 'long', 
+        year: 'numeric', 
+        month: 'long', 
+        day: 'numeric' 
+      });
+      
+      nextKehrterminInfo.textContent = formattedDate;
+      nextKehrterminBar.classList.remove('hidden');
+    }
   } catch (err) {
     console.error('Failed to load route customers:', err);
     routeCustomersList.innerHTML = `<p class="text-sm text-red-500">Fehler: ${err.message}</p>`;
