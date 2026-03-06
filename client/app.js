@@ -2791,8 +2791,17 @@ async function handleCategoryChange(e) {
   
   if (category === 'kehrtour') {
     kehrtourSelection.classList.remove('hidden');
-    // Reset selections
-    document.getElementById('kehrtour-type-tour')?.click();
+    // Load routes immediately
+    const routeSelect = document.getElementById('f-route');
+    if (routeSelect) {
+      try {
+        const routes = await api('GET', '/customers/routes');
+        routeSelect.innerHTML = '<option value="">-- Keine Route --</option>' +
+          routes.map(r => `<option value="${r}">${r}</option>`).join('');
+      } catch (err) {
+        console.error('Failed to load routes:', err);
+      }
+    }
   } else {
     kehrtourSelection.classList.add('hidden');
     document.getElementById('tour-selection')?.classList.add('hidden');
@@ -2871,13 +2880,15 @@ async function loadCalendarEventsForDate() {
     }
     
     calendarEventsList.innerHTML = events.map((event, idx) => `
-      <div class="p-2 bg-white border border-gray-300 rounded-lg hover:border-blue-500 transition" id="calendar-event-${idx}">
-        <div class="font-semibold text-gray-800 text-xs mb-1">${event.title}</div>
-        <div class="text-xs text-gray-600">⏰ ${event.start_time || ''} - ${event.end_time || ''}</div>
-        ${event.address ? `<div class="text-xs text-gray-500 mt-1">📍 ${event.address}</div>` : ''}
+      <div class="p-1.5 bg-white border border-gray-300 rounded hover:border-blue-500 transition" id="calendar-event-${idx}">
+        <div class="flex items-center justify-between mb-1">
+          <div class="text-sm font-bold text-blue-700">⏰ ${event.start_time || ''}</div>
+        </div>
+        <div class="font-semibold text-gray-800 text-xs leading-tight mb-0.5">${event.title}</div>
+        ${event.address ? `<div class="text-xs text-gray-600 leading-tight">${event.address}</div>` : ''}
         <button type="button" onclick="openTicketModal('event', '${event.id}', '${event.title.replace(/'/g, "\\'")}')"
-          class="mt-2 w-full px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded transition">
-          🎫 Ticket
+          class="mt-1.5 w-full px-1.5 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded transition">
+          🎫
         </button>
         <div id="ticket-status-event-${event.id}" class="mt-1 hidden"></div>
       </div>
@@ -3032,17 +3043,17 @@ async function handleRouteChange(e) {
     
     // Show route customers as cards
     if (customers.length > 0) {
-      html += '<div class="mb-2"><div class="font-semibold text-gray-700 text-xs mb-2">📍 Route-Objekte:</div></div>';
       customers.forEach((c, idx) => {
         html += `
-          <div class="p-2 bg-white border border-gray-300 rounded-lg hover:border-blue-500 transition" id="customer-card-${idx}">
-            <div class="font-semibold text-gray-800 text-xs mb-1">${c.objekt || c.name || '—'}</div>
-            <div class="text-xs text-gray-600">${c.strasse || ''} ${c.hnr || ''}</div>
-            <div class="text-xs text-gray-500">${c.plz || ''} ${c.ort || ''}</div>
-            ${c.kehrbuch_order ? `<div class="text-xs text-gray-500 mt-1">🔢 ${c.kehrbuch_order}</div>` : ''}
+          <div class="p-1.5 bg-white border border-gray-300 rounded hover:border-blue-500 transition" id="customer-card-${idx}">
+            <div class="flex items-center justify-between mb-1">
+              ${c.kehrbuch_order ? `<div class="text-lg font-bold text-blue-600">#${c.kehrbuch_order}</div>` : '<div></div>'}
+            </div>
+            <div class="font-semibold text-gray-800 text-xs leading-tight mb-0.5">${c.objekt || c.name || '—'}</div>
+            <div class="text-xs text-gray-600 leading-tight">${c.strasse || ''} ${c.hnr || ''}</div>
             <button type="button" onclick="openTicketModal('customer', ${c.id}, '${(c.objekt || c.name || '').replace(/'/g, "\\'")}')"
-              class="mt-2 w-full px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded transition">
-              🎫 Ticket
+              class="mt-1.5 w-full px-1.5 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded transition">
+              🎫
             </button>
             <div id="ticket-status-customer-${c.id}" class="mt-1 hidden"></div>
           </div>
@@ -3056,16 +3067,18 @@ async function handleRouteChange(e) {
         const events = await api('GET', `/calendar/employee/${employeeId}/events?date=${date}`);
         
         if (events.length > 0) {
-          html += '<div class="mt-3 mb-2"><div class="font-semibold text-gray-700 text-xs mb-2">📅 Zusätzliche Kalender-Events:</div></div>';
+          html += '<div class="col-span-full mt-2 mb-1"><div class="font-semibold text-gray-700 text-xs">📅 Zusätzliche Events:</div></div>';
           events.forEach((event, idx) => {
             html += `
-              <div class="p-2 bg-blue-50 border border-blue-300 rounded-lg hover:border-blue-500 transition" id="event-card-${idx}">
-                <div class="font-semibold text-blue-900 text-xs mb-1">${event.title}</div>
-                <div class="text-xs text-blue-700">⏰ ${event.start_time || ''} - ${event.end_time || ''}</div>
-                ${event.address ? `<div class="text-xs text-blue-600 mt-1">📍 ${event.address}</div>` : ''}
+              <div class="p-1.5 bg-blue-50 border border-blue-300 rounded hover:border-blue-500 transition" id="event-card-${idx}">
+                <div class="flex items-center justify-between mb-1">
+                  <div class="text-sm font-bold text-blue-700">⏰ ${event.start_time || ''}</div>
+                </div>
+                <div class="font-semibold text-blue-900 text-xs leading-tight mb-0.5">${event.title}</div>
+                ${event.address ? `<div class="text-xs text-blue-600 leading-tight">${event.address}</div>` : ''}
                 <button type="button" onclick="openTicketModal('event', '${event.id}', '${event.title.replace(/'/g, "\\'")}')"
-                  class="mt-2 w-full px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded transition">
-                  🎫 Ticket
+                  class="mt-1.5 w-full px-1.5 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded transition">
+                  🎫
                 </button>
                 <div id="ticket-status-event-${event.id}" class="mt-1 hidden"></div>
               </div>
