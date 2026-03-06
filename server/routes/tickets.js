@@ -75,7 +75,7 @@ router.put('/:id', (req, res) => {
   const { updateTicket } = req.app.locals;
   const { ticket_type, notiz, befund, status, closed_by } = req.body;
 
-  if (status && !['offen', 'erledigt'].includes(status)) {
+  if (status && !['offen', 'in_bearbeitung', 'erledigt'].includes(status)) {
     return res.status(400).json({ error: 'Ungültiger Status' });
   }
 
