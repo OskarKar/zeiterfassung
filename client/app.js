@@ -325,15 +325,6 @@ function renderErfassung() {
         
         <!-- Timeline layout: route stops left, calendar events right -->
         <div id="route-customers" class="hidden">
-          <!-- Stats bar -->
-          <div id="route-stats-bar" class="mb-3 p-2 bg-slate-50 border border-slate-200 rounded-lg flex items-center gap-4 text-xs">
-            <span class="text-slate-500">Stopps: <strong id="stat-total" class="text-slate-800">0</strong></span>
-            <span class="text-emerald-600">Erledigt: <strong id="stat-done">0</strong></span>
-            <div class="flex-1 bg-slate-200 h-1.5 rounded-full overflow-hidden">
-              <div id="stat-progress" class="bg-emerald-500 h-full rounded-full transition-all" style="width:0%"></div>
-            </div>
-            <span id="stat-next-date" class="text-green-700 font-semibold ml-auto"></span>
-          </div>
           <!-- Two-column: timeline left, calendar events right -->
           <div class="flex gap-3">
             <!-- Route timeline -->
@@ -2399,48 +2390,87 @@ async function loadTickets() {
     const tickets = await api('GET', url);
     state.tickets = tickets;
     
+    // Sort by date descending (newest first)
+    tickets.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    
     if (tickets.length === 0) {
       container.innerHTML = '<div class="text-center py-8 text-gray-400">Keine Tickets gefunden.</div>';
       return;
     }
 
     const ticketTypeLabels = {
-      dichtheit: 'Dichtheitsprüfung',
-      terminwunsch: 'Terminwunsch',
-      zusatzarbeit: 'Zusatzarbeit',
-      mangel: 'Mangel/Beanstandung',
-      sonstiges: 'Sonstiges'
+      dichtheit: '🔍 Dichtheitsprüfung',
+      terminwunsch: '📅 Terminwunsch',
+      zusatzarbeit: '🛠️ Zusatzarbeit',
+      mangel: '⚠️ Mangel',
+      sonstiges: '📝 Sonstiges'
     };
 
-    let html = '<div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="border-b-2 border-gray-100 text-gray-500 font-semibold text-xs uppercase"><th class="text-left py-3 px-2">Datum</th><th class="text-left py-3 px-2">Typ</th><th class="text-left py-3 px-2">Kunde/Tour</th><th class="text-left py-3 px-2">Mitarbeiter</th><th class="text-left py-3 px-2">Notiz</th><th class="text-left py-3 px-2">Status</th><th class="py-3 px-2 w-20"></th></tr></thead><tbody>';
+    // Compact card view
+    let html = '<div class="space-y-2">';
 
     tickets.forEach(ticket => {
-      const customerInfo = ticket.customer_name ? `${ticket.customer_name}, ${ticket.strasse} ${ticket.hnr}, ${ticket.plz} ${ticket.ort}` : (ticket.tour_name || ticket.calendar_event_title || '—');
-      const statusBadge = ticket.status === 'offen' 
-        ? '<span class="px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">Offen</span>'
-        : '<span class="px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">Erledigt</span>';
+      const customerInfo = ticket.customer_name 
+        ? `${ticket.customer_name}` 
+        : (ticket.tour_name || ticket.calendar_event_title || '—');
+      const address = ticket.strasse ? `${ticket.strasse} ${ticket.hnr}, ${ticket.plz} ${ticket.ort}` : '';
+      
+      // Traffic light status
+      let statusColor, statusIcon, statusText;
+      if (ticket.status === 'erledigt') {
+        statusColor = 'bg-green-500';
+        statusIcon = '✅';
+        statusText = 'Erledigt';
+      } else if (ticket.status === 'in_bearbeitung') {
+        statusColor = 'bg-yellow-500';
+        statusIcon = '⏳';
+        statusText = 'In Bearbeitung';
+      } else {
+        statusColor = 'bg-red-500';
+        statusIcon = '🔴';
+        statusText = 'Offen';
+      }
 
       html += `
-        <tr class="border-b border-gray-50 hover:bg-gray-50">
-          <td class="py-3 px-2 text-gray-600">${new Date(ticket.created_at).toLocaleDateString('de-DE')}</td>
-          <td class="py-3 px-2">${ticketTypeLabels[ticket.ticket_type] || ticket.ticket_type}</td>
-          <td class="py-3 px-2 text-gray-600">${customerInfo}</td>
-          <td class="py-3 px-2">${ticket.employee_name}</td>
-          <td class="py-3 px-2 text-gray-500 max-w-xs truncate">${ticket.notiz || '—'}</td>
-          <td class="py-3 px-2">${statusBadge}</td>
-          <td class="py-3 px-2 text-right">
-            ${ticket.status === 'offen' ? `
-              <button data-action="close-ticket" data-id="${ticket.id}" class="text-green-600 hover:text-green-800 text-xs px-2 py-1 rounded hover:bg-green-50 transition mr-1">✅</button>
-            ` : ''}
-            <button data-action="edit-ticket" data-id="${ticket.id}" class="text-blue-600 hover:text-blue-800 text-xs px-2 py-1 rounded hover:bg-blue-50 transition mr-1">✏️</button>
-            <button data-action="delete-ticket" data-id="${ticket.id}" class="text-red-500 hover:text-red-700 text-xs px-2 py-1 rounded hover:bg-red-50 transition">🗑️</button>
-          </td>
-        </tr>`;
+        <div class="flex items-center gap-2 p-2 bg-white border border-slate-200 rounded-lg hover:shadow-md transition">
+          <!-- Traffic light -->
+          <div class="flex-shrink-0 w-3 h-3 rounded-full ${statusColor}" title="${statusText}"></div>
+          
+          <!-- Date -->
+          <div class="flex-shrink-0 text-xs text-slate-500 w-16">
+            ${new Date(ticket.created_at).toLocaleDateString('de-DE', {day:'2-digit', month:'2-digit'})}
+          </div>
+          
+          <!-- Type -->
+          <div class="flex-shrink-0 text-xs font-semibold text-slate-700 w-32 truncate">
+            ${ticketTypeLabels[ticket.ticket_type] || ticket.ticket_type}
+          </div>
+          
+          <!-- Customer/Location -->
+          <div class="flex-1 min-w-0">
+            <div class="text-xs font-semibold text-slate-800 truncate">${customerInfo}</div>
+            ${address ? `<div class="text-[10px] text-slate-500 truncate">${address}</div>` : ''}
+          </div>
+          
+          <!-- Note -->
+          <div class="flex-shrink-0 text-xs text-slate-600 max-w-[200px] truncate" title="${ticket.notiz || ''}">
+            ${ticket.notiz || '—'}
+          </div>
+          
+          <!-- Actions -->
+          <div class="flex-shrink-0 flex items-center gap-1">
+            <button onclick="editTicket(${ticket.id})" class="p-1 text-blue-600 hover:bg-blue-50 rounded transition" title="Bearbeiten">
+              ✏️
+            </button>
+            <button onclick="deleteTicket(${ticket.id})" class="p-1 text-red-500 hover:bg-red-50 rounded transition" title="Löschen">
+              🗑️
+            </button>
+          </div>
+        </div>`;
     });
 
-    html += '</tbody></table></div>';
+    html += '</div>';
     container.innerHTML = html;
-    attachListeners();
   } catch (e) {
     container.innerHTML = `<div class="text-red-500 text-sm">Fehler: ${e.message}</div>`;
   }
@@ -2991,12 +3021,8 @@ function openTicketModal(type, id, title) {
             <span class="text-sm font-medium">⚠️ Mangel / Beanstandung</span>
           </label>
           <label class="flex items-center gap-2 p-3 border-2 border-gray-200 rounded-lg cursor-pointer hover:bg-blue-50 hover:border-blue-400 transition">
-            <input type="radio" name="ticket-type" value="dichtpruefung" class="w-4 h-4 accent-blue-600">
+            <input type="radio" name="ticket-type" value="dichtheit" class="w-4 h-4 accent-blue-600">
             <span class="text-sm font-medium">🔍 Dichtheitsprüfung gemacht</span>
-          </label>
-          <label class="flex items-center gap-2 p-3 border-2 border-gray-200 rounded-lg cursor-pointer hover:bg-blue-50 hover:border-blue-400 transition">
-            <input type="radio" name="ticket-type" value="neue_heizung" class="w-4 h-4 accent-blue-600">
-            <span class="text-sm font-medium">🔥 Neue Heizung / Sanierung</span>
           </label>
           <label class="flex items-center gap-2 p-3 border-2 border-gray-200 rounded-lg cursor-pointer hover:bg-blue-50 hover:border-blue-400 transition">
             <input type="radio" name="ticket-type" value="terminwunsch" class="w-4 h-4 accent-blue-600">
@@ -3106,20 +3132,85 @@ function toggleStopDone(container, customerId) {
     card?.classList.remove('bg-white', 'border-slate-200');
     card?.classList.add('bg-emerald-50', 'border-emerald-200');
   }
-  
-  // Update stats bar
-  const allDots = document.querySelectorAll('[id^="dot-"]');
-  const doneDots = document.querySelectorAll('[id^="dot-"].bg-emerald-500');
-  const total = allDots.length;
-  const done = doneDots.length;
-  const pct = total > 0 ? Math.round((done / total) * 100) : 0;
-  
-  const statDone = document.getElementById('stat-done');
-  const statProgress = document.getElementById('stat-progress');
-  if (statDone) statDone.textContent = done;
-  if (statProgress) statProgress.style.width = `${pct}%`;
 }
 window.toggleStopDone = toggleStopDone;
+
+// Edit ticket function
+async function editTicket(ticketId) {
+  const ticket = state.tickets?.find(t => t.id === ticketId);
+  if (!ticket) return;
+  
+  const modal = document.createElement('div');
+  modal.id = 'edit-ticket-modal';
+  modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
+  modal.innerHTML = `
+    <div class="bg-white rounded-2xl p-6 max-w-md w-full mx-4 shadow-2xl">
+      <h3 class="text-lg font-bold text-gray-800 mb-4">✏️ Ticket bearbeiten</h3>
+      
+      <div class="mb-3">
+        <label class="block text-sm font-semibold text-gray-700 mb-1">Status</label>
+        <select id="edit-ticket-status" class="w-full border-2 border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500">
+          <option value="offen" ${ticket.status === 'offen' ? 'selected' : ''}>🔴 Offen</option>
+          <option value="in_bearbeitung" ${ticket.status === 'in_bearbeitung' ? 'selected' : ''}>⏳ In Bearbeitung</option>
+          <option value="erledigt" ${ticket.status === 'erledigt' ? 'selected' : ''}>✅ Erledigt</option>
+        </select>
+      </div>
+      
+      <div class="mb-4">
+        <label class="block text-sm font-semibold text-gray-700 mb-1">Notiz</label>
+        <textarea id="edit-ticket-notiz" rows="3" class="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500">${ticket.notiz || ''}</textarea>
+      </div>
+      
+      <div class="flex gap-3">
+        <button onclick="closeEditTicketModal()" type="button"
+          class="flex-1 px-4 py-2.5 bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold rounded-lg transition">
+          Abbrechen
+        </button>
+        <button onclick="saveEditTicket(${ticketId})" type="button"
+          class="flex-1 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition">
+          💾 Speichern
+        </button>
+      </div>
+    </div>
+  `;
+  
+  document.body.appendChild(modal);
+}
+window.editTicket = editTicket;
+
+function closeEditTicketModal() {
+  const modal = document.getElementById('edit-ticket-modal');
+  if (modal) modal.remove();
+}
+window.closeEditTicketModal = closeEditTicketModal;
+
+async function saveEditTicket(ticketId) {
+  const status = document.getElementById('edit-ticket-status')?.value;
+  const notiz = document.getElementById('edit-ticket-notiz')?.value;
+  
+  try {
+    await api('PUT', `/tickets/${ticketId}`, { status, notiz });
+    showToast('✅ Ticket aktualisiert');
+    closeEditTicketModal();
+    loadTickets();
+  } catch (err) {
+    alert('Fehler beim Aktualisieren: ' + err.message);
+  }
+}
+window.saveEditTicket = saveEditTicket;
+
+async function deleteTicket(ticketId) {
+  if (!confirm('Ticket wirklich löschen?')) return;
+  
+  try {
+    await api('DELETE', `/tickets/${ticketId}`);
+    showToast('🗑️ Ticket gelöscht');
+    loadTickets();
+  } catch (err) {
+    alert('Fehler beim Löschen: ' + err.message);
+  }
+}
+window.deleteTicket = deleteTicket;
 
 async function handleRouteChange(e) {
   const routeName = e.target.value;
@@ -3143,15 +3234,6 @@ async function handleRouteChange(e) {
     
     // Render route customers as timeline stops
     if (customers.length > 0) {
-      const totalStops = customers.length;
-      // Update stats bar
-      const statTotal = document.getElementById('stat-total');
-      const statDone = document.getElementById('stat-done');
-      const statProgress = document.getElementById('stat-progress');
-      if (statTotal) statTotal.textContent = totalStops;
-      if (statDone) statDone.textContent = '0';
-      if (statProgress) statProgress.style.width = '0%';
-      
       customers.forEach((c, idx) => {
         const customerNumber = c.kundennummer || '';
         const displayName = c.objekt || c.name || '—';
