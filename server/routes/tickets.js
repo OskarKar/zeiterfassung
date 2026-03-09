@@ -72,10 +72,10 @@ router.post('/', (req, res) => {
 
 // PUT /api/tickets/:id - update ticket (close with befund)
 router.put('/:id', (req, res) => {
-  const { updateTicket } = req.app.locals;
+  const { updateTicket, db } = req.app.locals;
   const { ticket_type, notiz, befund, status, closed_by } = req.body;
 
-  if (status && !['offen', 'erledigt'].includes(status)) {
+  if (status && !['offen', 'in_bearbeitung', 'erledigt'].includes(status)) {
     return res.status(400).json({ error: 'Ungültiger Status' });
   }
 
@@ -87,14 +87,20 @@ router.put('/:id', (req, res) => {
   }
 
   try {
+    // Fetch existing ticket to preserve fields not being updated
+    const existing = db.prepare('SELECT * FROM tickets WHERE id = ?').get(req.params.id);
+    if (!existing) {
+      return res.status(404).json({ error: 'Ticket nicht gefunden' });
+    }
+
     const updateData = {
       id: req.params.id,
-      ticket_type: ticket_type || null,
-      notiz: notiz || null,
-      befund: befund || null,
-      status: status || 'offen',
-      closed_at: status === 'erledigt' ? new Date().toISOString() : null,
-      closed_by: status === 'erledigt' ? (closed_by || null) : null
+      ticket_type: ticket_type || existing.ticket_type,
+      notiz: notiz !== undefined ? notiz : existing.notiz,
+      befund: befund !== undefined ? befund : existing.befund,
+      status: status || existing.status,
+      closed_at: status === 'erledigt' ? new Date().toISOString() : existing.closed_at,
+      closed_by: status === 'erledigt' ? (closed_by || null) : existing.closed_by
     };
 
     updateTicket.run(updateData);

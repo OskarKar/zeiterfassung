@@ -325,21 +325,46 @@ function renderErfassung() {
         
         <!-- Timeline layout: route stops left, calendar events right -->
         <div id="route-customers" class="hidden">
-          <!-- Two-column: timeline left, calendar events right -->
-          <div class="flex gap-3">
-            <!-- Route timeline -->
-            <div class="flex-1 relative">
-              <div class="absolute left-[22px] top-4 bottom-4 w-0.5 bg-slate-200" style="z-index:0"></div>
-              <div id="route-customers-list" class="space-y-2"></div>
+          <!-- Two-column: route timeline left, calendar timeline right -->
+          <div class="flex gap-4">
+            <!-- Route timeline (planned) -->
+            <div class="flex-1">
+              <div class="text-xs font-bold text-slate-700 mb-2 flex items-center gap-2">
+                <span>🗺️ Route (Geplant)</span>
+              </div>
+              <div class="relative bg-slate-50 rounded-lg p-3 border border-slate-200">
+                <!-- Time axis labels -->
+                <div id="route-time-axis" class="absolute left-0 top-3 bottom-3 w-12 text-[9px] text-slate-400 font-mono"></div>
+                <!-- Timeline content -->
+                <div class="ml-14 relative" style="min-height:400px">
+                  <div class="absolute left-0 top-0 bottom-0 w-0.5 bg-slate-300"></div>
+                  <div id="route-customers-list"></div>
+                </div>
+              </div>
             </div>
-            <!-- Calendar events column -->
-            <div id="route-calendar-events-col" class="w-48 shrink-0 hidden">
-              <div class="text-xs font-semibold text-blue-600 mb-2">📅 Heute zusätzlich:</div>
-              <div id="route-calendar-events-list" class="space-y-2"></div>
+            <!-- Calendar timeline (actual) -->
+            <div class="flex-1">
+              <div class="text-xs font-bold text-blue-700 mb-2 flex items-center gap-2">
+                <span>📅 Kalender (Tatsächlich)</span>
+              </div>
+              <div class="relative bg-blue-50 rounded-lg p-3 border border-blue-200">
+                <!-- Time axis labels -->
+                <div id="calendar-time-axis" class="absolute left-0 top-3 bottom-3 w-12 text-[9px] text-blue-400 font-mono"></div>
+                <!-- Timeline content -->
+                <div class="ml-14 relative" style="min-height:400px">
+                  <div class="absolute left-0 top-0 bottom-0 w-0.5 bg-blue-300"></div>
+                  <div id="route-calendar-events-list"></div>
+                </div>
+              </div>
             </div>
           </div>
+          <!-- Gap analysis info -->
+          <div id="gap-analysis" class="mt-3 p-2 bg-yellow-50 border border-yellow-300 rounded-lg hidden">
+            <div class="text-xs font-semibold text-yellow-800 mb-1">⚠️ Zeitlücken erkannt:</div>
+            <div id="gap-list" class="text-xs text-yellow-700"></div>
+          </div>
           <!-- Next Kehrtermin footer -->
-          <div id="next-kehrtermin-bar" class="mt-3 p-2 bg-green-50 border-2 border-green-300 rounded-lg hidden">
+          <div id="next-kehrtermin-bar" class="mt-2 p-2 bg-green-50 border-2 border-green-300 rounded-lg hidden">
             <div class="flex items-center gap-2">
               <span>📅</span>
               <div>
@@ -3232,46 +3257,86 @@ async function handleRouteChange(e) {
     
     let html = '';
     
-    // Render route customers as timeline stops
+    // Render time axis (07:00 - 18:00)
+    const startHour = 7;
+    const endHour = 18;
+    const totalMinutes = (endHour - startHour) * 60; // 660 minutes
+    const timelineHeight = 400; // px
+    
+    // Generate time axis labels
+    let timeAxisHtml = '';
+    for (let h = startHour; h <= endHour; h++) {
+      const offsetPx = ((h - startHour) * 60 / totalMinutes) * timelineHeight;
+      timeAxisHtml += `<div style="position:absolute;top:${offsetPx}px;right:2px;" class="text-right">${String(h).padStart(2,'0')}:00</div>`;
+    }
+    document.getElementById('route-time-axis').innerHTML = timeAxisHtml;
+    document.getElementById('calendar-time-axis').innerHTML = timeAxisHtml;
+    
+    // Render route customers on fixed timeline
     if (customers.length > 0) {
+      // Sort by order
+      customers.sort((a, b) => (a.kehrbuch_order || 999) - (b.kehrbuch_order || 999));
+      
+      // Estimate times (assume 30min per stop, starting at 08:00)
+      let currentTime = 8 * 60; // 08:00 in minutes
+      const gaps = [];
+      
       customers.forEach((c, idx) => {
         const customerNumber = c.kundennummer || '';
         const displayName = c.objekt || c.name || '—';
         const address = `${c.strasse || ''} ${c.hnr || ''}`.trim();
         const order = c.kehrbuch_order || (idx + 1);
-        const num = idx + 1;
+        
+        // Calculate position on timeline
+        const stopTime = currentTime;
+        const offsetPx = ((stopTime - startHour * 60) / totalMinutes) * timelineHeight;
         
         html += `
-          <div class="relative ml-9 group cursor-pointer" id="customer-card-${idx}"
-               onclick="toggleStopDone(this, ${c.id})">
-            <!-- Timeline dot -->
-            <div class="absolute -left-9 top-1/2 -translate-y-1/2 w-4 h-4 rounded-full border-2 bg-white border-slate-300 group-hover:border-blue-400 transition z-10"
-                 id="dot-${c.id}"></div>
-            <div class="flex items-center gap-3 p-2.5 bg-white border border-slate-200 rounded-lg shadow-sm hover:border-blue-300 hover:shadow-md transition-all"
-                 id="stop-card-${c.id}">
-              <!-- Number + Time column -->
-              <div class="flex flex-col items-center min-w-[40px] border-r border-slate-200 pr-3">
-                <span class="text-[10px] font-bold text-slate-400">#${order}</span>
-              </div>
-              <!-- Main content -->
-              <div class="flex-1 min-w-0">
-                <div class="flex items-center justify-between">
-                  <span class="font-bold text-sm text-slate-900">${customerNumber}</span>
+          <div class="absolute left-0" style="top:${offsetPx}px;width:100%;">
+            <div class="relative group cursor-pointer" id="customer-card-${idx}"
+                 onclick="toggleStopDone(this, ${c.id})">
+              <div class="absolute -left-2 top-1/2 -translate-y-1/2 w-3 h-3 rounded-full border-2 bg-white border-slate-400 group-hover:border-blue-500 transition z-10"
+                   id="dot-${c.id}"></div>
+              <div class="ml-3 flex items-center gap-2 p-1.5 bg-white border border-slate-200 rounded shadow-sm hover:border-blue-300 transition"
+                   id="stop-card-${c.id}">
+                <div class="flex-shrink-0 text-[9px] font-bold text-slate-500 w-6">#${order}</div>
+                <div class="flex-1 min-w-0">
+                  <div class="font-bold text-xs text-slate-900 truncate">${customerNumber}</div>
+                  <div class="text-[10px] text-slate-600 truncate">${displayName}</div>
                 </div>
-                <div class="text-xs text-slate-600 truncate">${displayName}</div>
-                ${address ? `<div class="text-[10px] text-slate-400 truncate">${address}</div>` : ''}
+                <button type="button"
+                  onclick="event.stopPropagation(); openTicketModal('customer', ${c.id}, '${displayName.replace(/'/g, "\\'")}')"
+                  class="flex-shrink-0 p-1 text-slate-400 hover:text-blue-600 text-xs">
+                  🎫
+                </button>
               </div>
-              <!-- Ticket button -->
-              <button type="button"
-                onclick="event.stopPropagation(); openTicketModal('customer', ${c.id}, '${displayName.replace(/'/g, "\\'")}')"
-                class="flex-shrink-0 p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-full transition">
-                🎫
-              </button>
             </div>
-            <div id="ticket-status-customer-${c.id}" class="hidden mt-1 ml-1 text-[10px] text-emerald-700 font-semibold">✅ Ticket erstellt</div>
           </div>
         `;
+        
+        // Detect gaps (>45 min)
+        if (idx > 0) {
+          const prevTime = currentTime - 30;
+          const gap = stopTime - prevTime;
+          if (gap > 45) {
+            const gapHours = Math.floor(gap / 60);
+            const gapMins = gap % 60;
+            gaps.push(`${String(Math.floor(prevTime/60)).padStart(2,'0')}:${String(prevTime%60).padStart(2,'0')} - ${String(Math.floor(stopTime/60)).padStart(2,'0')}:${String(stopTime%60).padStart(2,'0')} (${gapHours}h ${gapMins}min)`);
+          }
+        }
+        
+        currentTime += 30; // Next stop in 30 min
       });
+      
+      // Show gap analysis
+      if (gaps.length > 0) {
+        const gapAnalysis = document.getElementById('gap-analysis');
+        const gapList = document.getElementById('gap-list');
+        if (gapAnalysis && gapList) {
+          gapList.innerHTML = gaps.map(g => `• ${g}`).join('<br>');
+          gapAnalysis.classList.remove('hidden');
+        }
+      }
     }
     
     // Also load calendar events for the selected date
@@ -3280,30 +3345,41 @@ async function handleRouteChange(e) {
         const events = await api('GET', `/calendar/employee/${employeeId}/events?date=${date}`);
         
         if (events.length > 0) {
-          // Render calendar events into the right column
-          const calEventsCol = document.getElementById('route-calendar-events-col');
+          // Render calendar events on fixed timeline (right column)
           const calEventsList = document.getElementById('route-calendar-events-list');
-          if (calEventsCol && calEventsList) {
+          if (calEventsList) {
             let evHtml = '';
             events.forEach((event, idx) => {
+              // Parse time from event (format: "HH:MM" or "HH:MM:SS")
+              let eventMinutes = 8 * 60; // Default 08:00
+              if (event.start_time) {
+                const [h, m] = event.start_time.split(':').map(Number);
+                if (!isNaN(h) && !isNaN(m)) {
+                  eventMinutes = h * 60 + m;
+                }
+              }
+              
+              // Calculate position on timeline
+              const offsetPx = ((eventMinutes - startHour * 60) / totalMinutes) * timelineHeight;
+              
               evHtml += `
-                <div class="relative ml-6 group" id="event-card-${idx}">
-                  <div class="absolute -left-6 top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-blue-500 border-2 border-blue-300 z-10"></div>
-                  <div class="p-2 bg-blue-50 border border-blue-300 rounded-lg shadow-sm hover:border-blue-500 transition">
-                    <div class="text-[10px] font-bold text-blue-700 mb-0.5">⏰ ${event.start_time || ''}</div>
-                    <div class="font-semibold text-blue-900 text-xs leading-tight">${event.title}</div>
-                    ${event.address ? `<div class="text-[10px] text-blue-600 truncate mt-0.5">${event.address}</div>` : ''}
-                    <button type="button" onclick="openTicketModal('event', '${event.id}', '${event.title.replace(/'/g, "\\'")}')"
-                      class="mt-1.5 w-full px-1.5 py-0.5 bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-semibold rounded transition">
-                      🎫 Ticket
-                    </button>
-                    <div id="ticket-status-event-${event.id}" class="hidden mt-1 text-[10px] text-emerald-700 font-semibold">✅</div>
+                <div class="absolute left-0" style="top:${offsetPx}px;width:100%;">
+                  <div class="relative" id="event-card-${idx}">
+                    <div class="absolute -left-2 top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-blue-500 border-2 border-blue-400 z-10"></div>
+                    <div class="ml-3 p-1.5 bg-white border border-blue-300 rounded shadow-sm hover:border-blue-500 transition">
+                      <div class="text-[9px] font-bold text-blue-700">⏰ ${event.start_time || ''}</div>
+                      <div class="font-semibold text-blue-900 text-xs leading-tight truncate">${event.title}</div>
+                      ${event.address ? `<div class="text-[10px] text-blue-600 truncate">${event.address}</div>` : ''}
+                      <button type="button" onclick="openTicketModal('event', '${event.id}', '${event.title.replace(/'/g, "\\'")}')"
+                        class="mt-1 w-full px-1 py-0.5 bg-blue-600 hover:bg-blue-700 text-white text-[9px] font-semibold rounded transition">
+                        🎫
+                      </button>
+                    </div>
                   </div>
                 </div>
               `;
             });
             calEventsList.innerHTML = evHtml;
-            calEventsCol.classList.remove('hidden');
           }
         }
       } catch (err) {
