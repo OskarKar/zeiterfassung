@@ -336,7 +336,7 @@ function renderErfassung() {
                 <!-- Time axis labels -->
                 <div id="route-time-axis" class="absolute left-0 top-3 bottom-3 w-12 text-[9px] text-slate-400 font-mono"></div>
                 <!-- Timeline content -->
-                <div class="ml-14 relative" style="min-height:400px">
+                <div class="ml-14 relative" style="min-height:550px">
                   <div class="absolute left-0 top-0 bottom-0 w-0.5 bg-slate-300"></div>
                   <div id="route-customers-list"></div>
                 </div>
@@ -351,7 +351,7 @@ function renderErfassung() {
                 <!-- Time axis labels -->
                 <div id="calendar-time-axis" class="absolute left-0 top-3 bottom-3 w-12 text-[9px] text-blue-400 font-mono"></div>
                 <!-- Timeline content -->
-                <div class="ml-14 relative" style="min-height:400px">
+                <div class="ml-14 relative" style="min-height:550px">
                   <div class="absolute left-0 top-0 bottom-0 w-0.5 bg-blue-300"></div>
                   <div id="route-calendar-events-list"></div>
                 </div>
@@ -3257,17 +3257,17 @@ async function handleRouteChange(e) {
     
     let html = '';
     
-    // Render time axis (07:00 - 18:00)
-    const startHour = 7;
-    const endHour = 18;
+    // Render time axis (05:00 - 16:00)
+    const startHour = 5;
+    const endHour = 16;
     const totalMinutes = (endHour - startHour) * 60; // 660 minutes
-    const timelineHeight = 400; // px
+    const timelineHeight = 550; // px - taller for better spacing
     
-    // Generate time axis labels
+    // Generate time axis labels (every hour, bold and larger)
     let timeAxisHtml = '';
     for (let h = startHour; h <= endHour; h++) {
       const offsetPx = ((h - startHour) * 60 / totalMinutes) * timelineHeight;
-      timeAxisHtml += `<div style="position:absolute;top:${offsetPx}px;right:2px;" class="text-right">${String(h).padStart(2,'0')}:00</div>`;
+      timeAxisHtml += `<div style="position:absolute;top:${offsetPx}px;right:4px;" class="text-right font-bold text-sm text-slate-600">${String(h).padStart(2,'0')}:00</div>`;
     }
     document.getElementById('route-time-axis').innerHTML = timeAxisHtml;
     document.getElementById('calendar-time-axis').innerHTML = timeAxisHtml;
@@ -3297,16 +3297,16 @@ async function handleRouteChange(e) {
                  onclick="toggleStopDone(this, ${c.id})">
               <div class="absolute -left-2 top-1/2 -translate-y-1/2 w-3 h-3 rounded-full border-2 bg-white border-slate-400 group-hover:border-blue-500 transition z-10"
                    id="dot-${c.id}"></div>
-              <div class="ml-3 flex items-center gap-2 p-1.5 bg-white border border-slate-200 rounded shadow-sm hover:border-blue-300 transition"
+              <div class="ml-3 flex items-center gap-2 p-2 bg-white border-2 border-slate-300 rounded-lg shadow hover:border-blue-400 hover:shadow-md transition"
                    id="stop-card-${c.id}">
-                <div class="flex-shrink-0 text-[9px] font-bold text-slate-500 w-6">#${order}</div>
+                <div class="flex-shrink-0 text-xs font-bold text-slate-600 w-8 text-center">#${order}</div>
                 <div class="flex-1 min-w-0">
-                  <div class="font-bold text-xs text-slate-900 truncate">${customerNumber}</div>
-                  <div class="text-[10px] text-slate-600 truncate">${displayName}</div>
+                  <div class="font-bold text-sm text-slate-900 truncate">${customerNumber}</div>
+                  <div class="text-xs text-slate-600 truncate">${displayName}</div>
                 </div>
                 <button type="button"
                   onclick="event.stopPropagation(); openTicketModal('customer', ${c.id}, '${displayName.replace(/'/g, "\\'")}')"
-                  class="flex-shrink-0 p-1 text-slate-400 hover:text-blue-600 text-xs">
+                  class="flex-shrink-0 p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition text-sm">
                   🎫
                 </button>
               </div>
@@ -3366,13 +3366,13 @@ async function handleRouteChange(e) {
                 <div class="absolute left-0" style="top:${offsetPx}px;width:100%;">
                   <div class="relative" id="event-card-${idx}">
                     <div class="absolute -left-2 top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-blue-500 border-2 border-blue-400 z-10"></div>
-                    <div class="ml-3 p-1.5 bg-white border border-blue-300 rounded shadow-sm hover:border-blue-500 transition">
-                      <div class="text-[9px] font-bold text-blue-700">⏰ ${event.start_time || ''}</div>
-                      <div class="font-semibold text-blue-900 text-xs leading-tight truncate">${event.title}</div>
-                      ${event.address ? `<div class="text-[10px] text-blue-600 truncate">${event.address}</div>` : ''}
+                    <div class="ml-3 p-2 bg-white border-2 border-blue-400 rounded-lg shadow hover:border-blue-600 hover:shadow-md transition">
+                      <div class="text-xs font-bold text-blue-700 mb-0.5">⏰ ${event.start_time || ''}</div>
+                      <div class="font-bold text-sm text-blue-900 leading-tight truncate">${event.title}</div>
+                      ${event.address ? `<div class="text-xs text-blue-600 truncate mt-0.5">${event.address}</div>` : ''}
                       <button type="button" onclick="openTicketModal('event', '${event.id}', '${event.title.replace(/'/g, "\\'")}')"
-                        class="mt-1 w-full px-1 py-0.5 bg-blue-600 hover:bg-blue-700 text-white text-[9px] font-semibold rounded transition">
-                        🎫
+                        class="mt-1.5 w-full px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded transition">
+                        🎫 Ticket
                       </button>
                     </div>
                   </div>
